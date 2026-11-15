@@ -82,6 +82,9 @@ Working and tested in Chrome, both over http and from `file://`:
 - Animation: the move is applied to the game first and the board redrawn; then
   `animateMove` plays the mover from its old place (`ChessScene.movePath`,
   `setPawnLength`). Any redraw calls `finishAnimations()` first.
+- **King and queen tips** (Original and Ornate): the king ends in tesseract nets
+  (`add_tesseract_net`), the queen in dodecahedra (`add_dodecahedron`); both helpers are
+  copied into `build_pieces.py` and `build_ornate_pieces.py` (scripts are standalone).
 - **Wood finish** (`look.pieceFinish` = "wood" default | "lacquer"): procedural grain
   in the piece shader (`WOOD_SHADER_FUNCTIONS`, `addPieceShader` in chess-scene.js),
   from object-space position x4 (models have no UVs, so photos can't be mapped;

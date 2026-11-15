@@ -115,10 +115,12 @@ Every piece comes in three versions, chosen per piece in the Studio
 
 ![King versions](docs/versions-king.png)
 
-- **Original**: the 2006-style pieces.
+- **Original**: the 2006-style pieces. The king is tipped at both ends with an
+  unfolded 4D cube (a tesseract net: eight small cubes in a cross), and the queen
+  with a dodecahedron (twelve pentagon faces).
 - **Ornate**: the original shapes, dressed with architectural "greebles" from wood
   moldings and mantels: ogee, cove, quarter-round and bead bands, dentil courses,
-  fluted pilaster faces and cornice caps. Its knight is a raven: a heavy hooked beak,
+  fluted pilaster faces and cornice caps. It has the same king and queen tips. Its knight is a raven: a heavy hooked beak,
   a bead eye and shaggy throat hackles, cut in the set's faceted style.
 - **Classic**: classic Staunton chess pieces crossed with architectural moldings
   (torus, scotia, fillet, collar, baluster stem), smooth and curved. Each is like two
@@ -191,7 +193,7 @@ Documents/           the project's goals and links
 - The piece designs are recreated from the 2006 originals by the same author.
   The classic and ornate versions, the horse and raven heads and the wood colours
   were drawn from reference photos (a Staunton chess set, wood moldings, a horse's
-  head, a carved knight, a raven, wood grain). Those photos belong to others and
+  head, a carved knight, a raven, wood grain, a tesseract net, a dodecahedron). Those photos belong to others and
   are not included in this repository.
 - The lighting is a small hand-written shader (`STUDIO_FRAGMENT_SHADER` in
   `js/chess-scene.js`) that paints a dark photo studio with an overhead softbox,

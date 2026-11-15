@@ -201,21 +201,66 @@ def rotation_y(degrees):
 # ===== The pieces =====
 # Each function fills a bmesh. Sizes are in cells (1.0 = one cube of the board).
 
+# ===== Shapes for the king's and queen's tips =====
+
+def add_tesseract_net(mesh_data, cube_size, base_height, pointing_up, material_index=TRIM):
+    """An unfolded 4D cube (a tesseract net, the 'Dali cross'): eight small cubes,
+    a column of four with four more around the second from the end. The long leg
+    starts at `base_height` and points toward the middle of the piece; the cross
+    arms sit near the tip. Turned 45 degrees so the arms read from every side."""
+    direction = 1 if pointing_up else -1
+    turn = Matrix.Rotation(math.radians(45), 4, "Z")
+    cells = [(0, 0, level) for level in range(4)]                     # the column
+    cells += [(1, 0, 2), (-1, 0, 2), (0, 1, 2), (0, -1, 2)]           # the cross arms
+    for across, along, level in cells:
+        center = Vector((across * cube_size, along * cube_size,
+                         direction * (base_height + (level + 0.5) * cube_size)))
+        matrix = (turn @ Matrix.Translation(center)
+                  @ Matrix.Diagonal((cube_size, cube_size, cube_size, 1.0)))
+        faces_before = set(mesh_data.faces)
+        bmesh.ops.create_cube(mesh_data, size=0.94, matrix=matrix)   # small gaps show each cube
+        tag_new_faces(mesh_data, faces_before, material_index)
+
+
+def add_dodecahedron(mesh_data, inner_radius, center, material_index=TRIM):
+    """A regular dodecahedron (twelve pentagon faces) sitting flat on a face.
+    `inner_radius`: from its centre to the middle of a face."""
+    golden = (1 + math.sqrt(5)) / 2
+    points = [Vector((x, y, z)) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
+    for a in (-1, 1):
+        for b in (-1, 1):
+            points += [Vector((0, a / golden, b * golden)),
+                       Vector((a / golden, b * golden, 0)),
+                       Vector((a * golden, 0, b / golden))]
+    # In these units a face is 1.376 from the centre; the face around (0, 1, golden)
+    # is tipped up to face straight up, so the shape sits flat.
+    scale = inner_radius / 1.3764
+    tilt = Matrix.Rotation(math.atan(1 / golden), 4, "X")
+    verts = [mesh_data.verts.new(Vector(center) + (tilt @ point) * scale) for point in points]
+    faces_before = set(mesh_data.faces)
+    hull = bmesh.ops.convex_hull(mesh_data, input=verts)
+    hull_faces = [item for item in hull["geom"] if isinstance(item, bmesh.types.BMFace)]
+    # The hull is made of triangles: merge each flat group into one pentagon.
+    bmesh.ops.dissolve_limit(mesh_data, angle_limit=math.radians(1), verts=verts,
+                             edges=list({edge for face in hull_faces for edge in face.edges}))
+    tag_new_faces(mesh_data, faces_before, material_index)
+
+
 def build_king(mesh_data):
     """Gyroscope-like: an upright octagonal ring around an octagonal core,
-    cross bars, and a small diamond cube above and below."""
+    cross bars, and an unfolded 4D cube above and below."""
     add_octagon_ball(mesh_data, 0.19, stretch=1.1)
     add_octagon_ring(mesh_data, 0.33, 0.07, 0.07, rotation=rotation_x(90))
     add_box(mesh_data, (0.74, 0.06, 0.06))           # horizontal bar
     add_box(mesh_data, (0.52, 0.11, 0.11))           # stepped centre of the bar
     add_box(mesh_data, (0.06, 0.06, 0.78))           # vertical spine
-    for z in (0.43, -0.43):
-        add_box(mesh_data, (0.08, 0.08, 0.08), center=(0, 0, z * 0.95),
-                rotation=rotation_y(45) @ rotation_x(35), material_index=TRIM)
+    # At each end: an unfolded 4D cube (tesseract net), see add_tesseract_net.
+    for pointing_up in (True, False):
+        add_tesseract_net(mesh_data, 0.03, 0.375, pointing_up)
 
 
 def build_queen(mesh_data):
-    """A tall faceted barrel pierced by a rod, with discs and small cubes at both ends."""
+    """A tall faceted barrel pierced by a rod, with discs and dodecahedra at both ends."""
     add_octagon_ball(mesh_data, 0.2, stretch=1.45)
     for z in (0.11, -0.11):
         add_octagon_cylinder(mesh_data, 0.215, 0.035, center=(0, 0, z), material_index=TRIM)
@@ -224,7 +269,7 @@ def build_queen(mesh_data):
         add_octagon_cylinder(mesh_data, 0.045, 0.03, center=(x, 0, 0), rotation=rotation_y(90))
     for disc_z, cube_z in ((0.33, 0.41), (-0.33, -0.41)):
         add_octagon_cylinder(mesh_data, 0.09, 0.025, center=(0, 0, disc_z))
-        add_box(mesh_data, (0.1, 0.1, 0.1), center=(0, 0, cube_z), material_index=TRIM)
+        add_dodecahedron(mesh_data, 0.056, (0, 0, cube_z * 0.99))
 
 
 def build_bishop(mesh_data):
