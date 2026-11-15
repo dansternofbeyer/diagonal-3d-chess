@@ -5,20 +5,19 @@ The 2026 pieces mix classic Staunton chess pieces and architectural moldings
 (torus, scotia, fillet, collar, baluster stem) with the faceted look of the
 2006 originals. Each piece is like two classic pieces joined at their bases:
 a wide molded plinth in the middle and the piece's head at BOTH ends, so it
-reads the same from above and below on the tilted board. The knight works
-like a playing card: one horse head up, one down, facing opposite ways.
+reads the same from above and below on the tilted board. The knight has a
+3D horse head at both ends, mirrored so both heads face the same way.
 
-Every piece is built in three styles from the same design:
-  faceted  8 sides, curves cut into a few flat facets (closest to 2006)
-  deco     16 sides, curves turned into sharp chevrons, fluted stems
-  classic  32 smooth sides, fully curved moldings
+The pieces are built in the "classic" style: 32 smooth sides, fully curved
+moldings. (The style switches still know "faceted" and "deco", which were
+tried and retired; remove_retired_pieces() clears them from the .blend.)
 
 How it works: each piece's outline (from the middle up to the tip) is a list of
 points made with molding helpers below. The outline is mirrored to make the
 bottom half and spun around the vertical axis (a lathe). Extra parts that are
 not round (crosses, crown points, battlements, horse heads) are added on top.
 
-Exports models/<piece>-<style>.glb, e.g. models/king-deco.glb. The original
+Exports models/<piece>-classic.glb, e.g. models/king-classic.glb. The original
 2006-style pieces (blender/build_pieces.py, models/king.glb ...) are untouched.
 Afterwards run, from the project folder:
     python3 tools/bundle_models.py
@@ -26,6 +25,9 @@ Afterwards run, from the project folder:
 Same conventions as build_pieces.py: one cell = 1 Blender unit, Z up, materials
 "Body" (slot 0, recoloured per side) and "Trim" (slot 1, a lighter shade).
 Safe-mode friendly: only bpy, bmesh, mathutils; no file access, no callbacks.
+It also runs headless from the project folder:
+    /Applications/Blender.app/Contents/MacOS/Blender -b blender/pieces.blend \
+        --python blender/build_classic_pieces.py --python-expr "import bpy; bpy.ops.wm.save_mainfile()"
 
 Open source under the MIT License (see ../LICENSE).
 """
@@ -43,7 +45,10 @@ MODELS_FOLDER = PROJECT_FOLDER + "/models"
 COLLECTION_NAME = "ClassicChessPieces"
 
 PIECES = ["king", "queen", "bishop", "rook", "knight", "pawn_body", "pawn_cap"]
-STYLES = ["faceted", "deco", "classic"]
+# Only "classic" is used now. "faceted" and "deco" were tried and retired
+# (2026-11-15); the style switches below still describe them.
+STYLES = ["classic"]
+RETIRED_STYLES = ["faceted", "deco"]
 
 BODY = 0
 TRIM = 1
@@ -283,47 +288,6 @@ def add_disc(mesh_data, style, radius, thickness, center, tilt_degrees, material
     tag_new_faces(mesh_data, faces_before, material)
 
 
-def smooth_polygon(points, rounds):
-    """Chaikin corner cutting: rounds the corners of a closed outline."""
-    for _ in range(rounds):
-        rounded = []
-        for index in range(len(points)):
-            first = points[index]
-            second = points[(index + 1) % len(points)]
-            rounded.append((first[0] * 0.75 + second[0] * 0.25, first[1] * 0.75 + second[1] * 0.25))
-            rounded.append((first[0] * 0.25 + second[0] * 0.75, first[1] * 0.25 + second[1] * 0.75))
-        points = rounded
-    return points
-
-
-def add_extruded_outline(mesh_data, outline, thickness, chamfer, flip, material=BODY):
-    """Turn a flat (x, z) outline into a solid slab `thickness` deep along Y,
-    with chamfered edges. `flip` turns it 180 degrees about Y (playing-card style)."""
-    center_x = sum(point[0] for point in outline) / len(outline)
-    center_z = sum(point[1] for point in outline) / len(outline)
-    half = thickness / 2
-    layers = []
-    for y, shrink in ((-half, chamfer), (-half * 0.55, 0.0), (half * 0.55, 0.0), (half, chamfer)):
-        layer = []
-        for x, z in outline:
-            px = x + (center_x - x) * shrink
-            pz = z + (center_z - z) * shrink
-            if flip:
-                px, pz = -px, -pz
-            layer.append(mesh_data.verts.new((px, y, pz)))
-        layers.append(layer)
-    faces_before = set(mesh_data.faces)
-    count = len(outline)
-    for layer_index in range(3):
-        near, far = layers[layer_index], layers[layer_index + 1]
-        for index in range(count):
-            following = (index + 1) % count
-            mesh_data.faces.new((near[index], near[following], far[following], far[index]))
-    mesh_data.faces.new(list(reversed(layers[0])))
-    mesh_data.faces.new(layers[3])
-    tag_new_faces(mesh_data, faces_before, material)
-
-
 # ===== The pieces =====
 # Profiles climb from the middle (height 0) to the tip. Sizes in cells, before PIECE_SCALE.
 
@@ -412,22 +376,139 @@ def build_rook(mesh_data, style):
             add_box(mesh_data, (0.05, 0.07, 0.045), center, rotation=rotation, material=TRIM)
 
 
-# The knight's horse head, facing +X, standing on the plinth (x, z in cells).
-HORSE_OUTLINE = [
-    (-0.13, 0.2), (-0.15, 0.28), (-0.15, 0.36), (-0.12, 0.44), (-0.07, 0.5),
-    (-0.05, 0.565), (-0.02, 0.52), (0.05, 0.5), (0.12, 0.45), (0.19, 0.39),
-    (0.215, 0.355), (0.205, 0.328), (0.16, 0.318), (0.15, 0.3), (0.09, 0.3),
-    (0.04, 0.27), (0.06, 0.23), (0.1, 0.2),
-]
+# ===== The knight's horse head =====
+# A real 3D head, lofted like a ship's hull: a series of cross-sections along a
+# spine that rises up the neck, turns at the poll (top of the head) and runs
+# forward and down to the muzzle. Each section has its own width and its own
+# height above and below the spine, which gives the shape: a deep jowl under
+# the cheek, a slimmer bridge of the nose, and a soft square muzzle.
+# The head faces +X; the game turns the knight so it faces the opponent.
 
-# Deco: the mane is cut into steps, like the carved manes of classic knights.
-DECO_HORSE_OUTLINE = [
-    (-0.13, 0.2), (-0.15, 0.25), (-0.17, 0.25), (-0.15, 0.31), (-0.17, 0.31),
-    (-0.15, 0.37), (-0.16, 0.38), (-0.12, 0.44), (-0.13, 0.45), (-0.07, 0.5),
-    (-0.05, 0.565), (-0.02, 0.52), (0.05, 0.5), (0.19, 0.39), (0.215, 0.355),
-    (0.215, 0.325), (0.15, 0.318), (0.15, 0.3), (0.09, 0.3), (0.04, 0.27),
-    (0.06, 0.23), (0.1, 0.2),
+# (x, z) of the spine, half width, height above the spine, height below it.
+HORSE_SECTIONS = [
+    (-0.020, 0.170, 0.084, 0.100, 0.100),   # base of the neck (hidden in the collar)
+    (-0.034, 0.270, 0.080, 0.096, 0.090),
+    (-0.040, 0.360, 0.072, 0.088, 0.068),   # throat latch: the neck narrows under the jaw
+    (-0.022, 0.430, 0.070, 0.070, 0.104),   # poll: the top of the head, where it turns
+    (0.035, 0.462, 0.076, 0.052, 0.128),    # forehead and deep jowl (the jaw)
+    (0.098, 0.442, 0.064, 0.044, 0.094),    # cheek narrowing toward the nose
+    (0.158, 0.408, 0.054, 0.037, 0.060),    # bridge of the nose
+    (0.204, 0.382, 0.050, 0.033, 0.050),    # muzzle
+    (0.230, 0.369, 0.040, 0.024, 0.037),    # tip of the muzzle
 ]
+HORSE_SIDES = 14
+
+
+def horse_frames():
+    """Spine point, forward direction and 'up' direction (towards the mane or
+    forehead) for every section."""
+    frames = []
+    count = len(HORSE_SECTIONS)
+    for index in range(count):
+        before = HORSE_SECTIONS[max(0, index - 1)]
+        after = HORSE_SECTIONS[min(count - 1, index + 1)]
+        forward = Vector((after[0] - before[0], 0, after[1] - before[1])).normalized()
+        up = forward.cross(Vector((0, 1, 0))).normalized()
+        section = HORSE_SECTIONS[index]
+        frames.append((Vector((section[0], 0, section[1])), forward, up))
+    return frames
+
+
+def add_horse_head(mesh_data, mirror):
+    """The head, its ears, eyes, nostrils, mouth line, cheeks and mane.
+    `mirror` reflects it below the middle (z -> -z): the lower head faces the
+    same way as the upper one."""
+    flip = Matrix.Diagonal((1, 1, -1, 1)) if mirror else Matrix.Identity(4)
+    frames = horse_frames()
+    side_axis = Vector((0, 1, 0))
+    faces_before = set(mesh_data.faces)
+
+    rings = []
+    for (spine, forward, up), section in zip(frames, HORSE_SECTIONS):
+        half_width, above, below = section[2], section[3], section[4]
+        ring = []
+        for step in range(HORSE_SIDES):
+            angle = step * 2 * math.pi / HORSE_SIDES
+            across = math.sin(angle)
+            upward = math.cos(angle)
+            # Flattened sides, like a real horse's head (a superellipse).
+            lateral = half_width * math.copysign(abs(across) ** 0.65, across)
+            vertical = (above if upward > 0 else below) * math.copysign(abs(upward) ** 0.85, upward)
+            ring.append(mesh_data.verts.new(flip @ (spine + side_axis * lateral + up * vertical)))
+        rings.append(ring)
+    for index in range(len(rings) - 1):
+        for step in range(HORSE_SIDES):
+            following = (step + 1) % HORSE_SIDES
+            mesh_data.faces.new((rings[index][step], rings[index][following],
+                                 rings[index + 1][following], rings[index + 1][step]))
+    # Close the base of the neck and round off the muzzle with a point just ahead.
+    mesh_data.faces.new(list(reversed(rings[0])))
+    tip = mesh_data.verts.new(flip @ Vector((0.244, 0, 0.364)))
+    for step in range(HORSE_SIDES):
+        following = (step + 1) % HORSE_SIDES
+        mesh_data.faces.new((rings[-1][step], rings[-1][following], tip))
+    tag_new_faces(mesh_data, faces_before, BODY)
+
+    # Cheeks: a flattened swell on each side shapes the jaw.
+    for side in (1, -1):
+        matrix = flip @ Matrix.Translation((0.05, side * 0.056, 0.4)) @ Matrix.Diagonal((1.45, 0.45, 1.05, 1))
+        faces_before = set(mesh_data.faces)
+        bmesh.ops.create_uvsphere(mesh_data, u_segments=16, v_segments=10, radius=0.05, matrix=matrix)
+        tag_new_faces(mesh_data, faces_before, BODY)
+
+    # Ears: two small cones leaning back.
+    for side in (1, -1):
+        matrix = (flip @ Matrix.Translation((-0.04, side * 0.036, 0.492))
+                  @ Matrix.Rotation(math.radians(-22), 4, "Y") @ Matrix.Rotation(math.radians(side * -12), 4, "X")
+                  @ Matrix.Translation((0, 0, 0.035)))
+        faces_before = set(mesh_data.faces)
+        bmesh.ops.create_cone(mesh_data, cap_ends=True, cap_tris=False, segments=8,
+                              radius1=0.022, radius2=0.002, depth=0.075, matrix=matrix)
+        tag_new_faces(mesh_data, faces_before, BODY)
+
+    # Eyes and nostrils, in the lighter trim colour so they read.
+    for side in (1, -1):
+        add_ball_at(mesh_data, 0.019, flip @ Vector((0.05, side * 0.07, 0.472)))
+        add_ball_at(mesh_data, 0.011, flip @ Vector((0.226, side * 0.027, 0.382)))
+
+    # The mouth: a thin line where the upper and lower lips meet.
+    matrix = (flip @ Matrix.Translation((0.198, 0, 0.352)) @ Matrix.Rotation(math.radians(30), 4, "Y")
+              @ Matrix.Diagonal((0.07, 0.088, 0.007, 1)))
+    faces_before = set(mesh_data.faces)
+    bmesh.ops.create_cube(mesh_data, size=1.0, matrix=matrix)
+    tag_new_faces(mesh_data, faces_before, TRIM)
+
+    # Mane: a row of carved ridges down the back of the neck.
+    for index in range(7):
+        along = index / 6
+        position = 0.15 + along * 2.75          # from just above the collar to the poll
+        lower = int(position)
+        mix = position - lower
+        spine_a, forward_a, up_a = frames[lower]
+        spine_b, forward_b, up_b = frames[min(lower + 1, len(frames) - 1)]
+        section_a, section_b = HORSE_SECTIONS[lower], HORSE_SECTIONS[min(lower + 1, len(frames) - 1)]
+        spine = spine_a.lerp(spine_b, mix)
+        forward = forward_a.lerp(forward_b, mix).normalized()
+        up = up_a.lerp(up_b, mix).normalized()
+        above = section_a[3] + (section_b[3] - section_a[3]) * mix
+        orientation = Matrix((
+            (up.x, 0, forward.x, 0),
+            (up.y, 1, forward.y, 0),
+            (up.z, 0, forward.z, 0),
+            (0, 0, 0, 1),
+        ))
+        matrix = (flip @ Matrix.Translation(spine + up * (above + 0.004)) @ orientation
+                  @ Matrix.Diagonal((0.03, 0.05, 0.026, 1)))
+        faces_before = set(mesh_data.faces)
+        bmesh.ops.create_cube(mesh_data, size=1.0, matrix=matrix)
+        tag_new_faces(mesh_data, faces_before, TRIM)
+
+
+def add_ball_at(mesh_data, radius, center, material=TRIM):
+    faces_before = set(mesh_data.faces)
+    bmesh.ops.create_uvsphere(mesh_data, u_segments=12, v_segments=8, radius=radius,
+                              matrix=Matrix.Translation(center))
+    tag_new_faces(mesh_data, faces_before, material)
 
 
 def build_knight(mesh_data, style):
@@ -438,20 +519,8 @@ def build_knight(mesh_data, style):
     fillet(profile, 0.014, TRIM)
     line_to(profile, 0.0, 0.214)
     revolve(mesh_data, mirrored_profile(profile), style)
-
-    if style == "deco":
-        outline = DECO_HORSE_OUTLINE
-    elif style == "classic":
-        outline = smooth_polygon(HORSE_OUTLINE, 2)
-    else:
-        outline = HORSE_OUTLINE
-    for flip in (False, True):
-        add_extruded_outline(mesh_data, outline, 0.15, 0.08, flip)
-        for side_y in (-0.074, 0.074):
-            eye = (0.07, side_y, 0.44)
-            if flip:
-                eye = (-0.07, side_y, -0.44)
-            add_ball(mesh_data, style, 0.017, eye)
+    add_horse_head(mesh_data, mirror=False)
+    add_horse_head(mesh_data, mirror=True)
 
 
 def build_pawn_body(mesh_data, style):
@@ -565,6 +634,18 @@ def build_piece_object(name, style, body_material, trim_material, collection):
     return piece_object
 
 
+def remove_retired_pieces():
+    """Delete the faceted and deco objects from the Blender file."""
+    for style in RETIRED_STYLES:
+        for name in PIECES:
+            old_object = bpy.data.objects.get(name + "-" + style)
+            if old_object is not None:
+                old_mesh = old_object.data
+                bpy.data.objects.remove(old_object, do_unlink=True)
+                if old_mesh.users == 0:
+                    bpy.data.meshes.remove(old_mesh)
+
+
 def build_all():
     body_material = get_material("Body", (0.8, 0.05, 0.03))
     trim_material = get_material("Trim", (0.85, 0.87, 0.9))
@@ -607,5 +688,6 @@ def export_all():
 
 # ===== Run =====
 
+remove_retired_pieces()
 build_all()
 export_all()

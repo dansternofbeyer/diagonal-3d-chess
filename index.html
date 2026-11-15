@@ -132,8 +132,19 @@
   .plane-control input[type=range] { width: 100%; }
   .plane-control .number { min-width: 2.4em; text-align: right; }
 
-  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
-  .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border: 1px solid #555; }
+  /* Explore Moves: the whole box is one on/off toggle button. */
+  .toggle-section {
+    display: flex; width: 100%; align-items: center; justify-content: center; gap: 10px;
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+    padding: 5px 8px; margin-bottom: 10px; cursor: pointer; font-size: 11px; letter-spacing: 0.08em;
+  }
+  .toggle-section:hover { color: var(--link); }
+  .toggle-state {
+    min-width: 34px; padding: 1px 6px; border: 1px solid var(--rule); border-radius: 9px;
+    font-size: 10px; letter-spacing: 0.06em; color: var(--muted);
+  }
+  .toggle-section[aria-pressed="true"] { border-color: #d49a2c; }
+  .toggle-section[aria-pressed="true"] .toggle-state { background: var(--banner); border-color: var(--banner); color: #000; }
 
   .captured-list { min-height: 20px; font-size: 18px; line-height: 1.1; letter-spacing: 1px; }
   .captured-list.red { color: var(--red-side); }
@@ -273,38 +284,19 @@
     <details class="section" data-section="show">
       <summary>..SHOW MOVES AS..</summary>
       <div class="body">
-        <div class="choice-group" role="group" aria-label="Move highlight style">
-          <button type="button" class="button" data-style="blue">Glass cubes</button>
-          <button type="button" class="button" data-style="dots">Glowing dots</button>
-        </div>
+        <label class="check"><input type="checkbox" data-move-style="cubes"> Glass cubes</label>
+        <label class="check"><input type="checkbox" data-move-style="dots"> Glowing dots</label>
+        <label class="check"><input type="checkbox" data-move-style="edges"> Cube edges (a thin outline of each cube)</label>
         <label class="check"><input type="checkbox" id="show-lines"> Move lines (a thin line along each move's path)</label>
         <label class="check"><input type="checkbox" id="show-grid"> Show a dot in every cell</label>
         <label class="check"><input type="checkbox" id="auto-spin"> Slowly spin the board</label>
       </div>
     </details>
 
-    <details class="section" data-section="selected">
-      <summary>..SELECTED..</summary>
-      <div class="body">
-        <div id="selected-info" class="hint">Click a piece to select it.</div>
-        <div class="row">
-          <button type="button" class="button" id="deselect" disabled>Deselect</button>
-          <button type="button" class="button" id="remove-piece" disabled title="Take this piece off the board">Take off board</button>
-        </div>
-      </div>
-    </details>
-
-    <details class="section" data-section="available">
-      <summary>..AVAILABLE MOVES..</summary>
-      <div class="body">
-        <div class="row">
-          <button type="button" class="button" id="select-pieces" aria-pressed="false">Select pieces</button>
-          <button type="button" class="button" id="clear-available">Clear moves</button>
-        </div>
-        <div class="legend"><span><i id="legend-red"></i>Red</span><span><i id="legend-black"></i>Black</span><span><i id="legend-shared"></i>Both sides</span></div>
-        <div class="hint">Turn on <b>Select pieces</b>, then click as many pieces as you like (either side) to see all their moves at once. Click a piece again to drop it. Nothing moves while this is on.</div>
-      </div>
-    </details>
+    <button type="button" class="toggle-section" id="explore-moves" aria-pressed="false"
+            title="Click pieces of either side to see all their moves at once">
+      ..EXPLORE MOVES.. <span class="toggle-state" id="explore-state">OFF</span>
+    </button>
 
     <details class="section" data-section="taken">
       <summary>..TAKEN..</summary>
@@ -338,13 +330,14 @@
     </ul>
     <h3>MOVING PIECES</h3>
     <ul>
-      <li>Click a piece. Cubes (or dots) show where it can go. Orange ones are captures.</li>
+      <li>Click a piece. Cubes, dots or cube edges (your choice, in Show moves as) show where it can go. Orange ones are captures.</li>
       <li>Click a highlighted cube to move there. Click empty space or press Esc to clear.</li>
+      <li><b>Castling</b> works as in 2D chess, along the home edge: select the king and the castling moves light up, two cubes toward a rook. It is only offered if neither piece has moved, the cubes between them are empty, and the king is not in check, crossing an attacked cube or landing on one.</li>
       <li><b>Undo last move</b> (in the Moves box, or Ctrl+Z) takes back the last move.</li>
     </ul>
     <h3>CLASSIC OR FREE</h3>
     <p><b>Classic moves</b> shows each piece's normal moves. <b>Free moves</b> lets any piece go anywhere: pick a plane with the slider and every cube in it lights up. This is the "incorrect move" from the original: the board does not decide the rules, the players do.</p>
-    <p>A piece can always be <b>taken off the board</b> by hand from the Selected box.</p>
+    <p>A piece can always be <b>taken off the board</b> by hand: select it and press <b>Delete</b>.</p>
     <h3>THE BOARD</h3>
     <p>The board is an 8×8×8 cube, tilted 45° so one edge points at each player. Red starts on the front edge, Black on the back edge. Each upright slice of the cube is a <b>plane</b>, numbered 0 (Red's edge) to 14 (Black's edge).</p>
     <h3>TAKEN PIECES</h3>
@@ -352,8 +345,8 @@
     <h3>SAVE AND LOAD</h3>
     <p>Under the <b>GAME</b> menu, <b>Save game</b> downloads a .txt file listing every piece. It is plain text, so you can edit it to set up puzzles and send it to a friend. <b>Load game</b> (or drop the file on the board) sets the pieces up again.</p>
     <p>The game in progress is also kept in this browser, so visiting the Studio or reloading the page picks up where you left off. <b>New game</b> starts over.</p>
-    <h3>AVAILABLE MOVES</h3>
-    <p>Turn on <b>Select pieces</b> and click several pieces, from either side, to see all their moves at once: red for Red, white for Black, purple where both sides can reach. Good for seeing who guards what.</p>
+    <h3>EXPLORE MOVES</h3>
+    <p>Turn <b>Explore moves</b> ON and click several pieces, from either side, to see all their moves at once: red for Red, white for Black, purple where both sides can reach. Click a piece again to drop it. Nothing moves while it is on; turn it OFF to play again. Good for seeing who guards what.</p>
     <h3>MOVE LINES</h3>
     <p>Tick <b>Move lines</b> to draw a thin line along each move's path, through every cube it passes.</p>
   </div>
@@ -426,10 +419,10 @@
     selectedPieceId: null,
     moveMode: "classic",        // "classic" or "free"
     enforceTurns: true,
-    highlightStyle: "blue",     // "blue" (glass cubes) or "dots"
+    moveStyle: { cubes: true, dots: false, edges: false },   // how moves are shown (any mix)
     showLines: false,           // thin lines along each move's path
     freePlane: 7,
-    showingAvailableMoves: false, // the Available Moves "Select pieces" tool is on
+    showingAvailableMoves: false, // the Explore Moves toggle is ON
     availablePieceIds: [],      // pieces whose moves it shows
     currentMoves: [],
     pendingPromotionId: null,
@@ -453,7 +446,7 @@
   let highlights = null;        // result of Scene3D.buildMoveHighlights
   const glowLights = Scene3D.createGlowLights(viewer.scene);
   const SELECTED_GLOW_COLOR = "#ffb22e";
-  let selectionBoxes = [];      // gold outlines around the selected piece(s)
+  let selectionBoxes = [];      // gold outlines of the cells the selected piece(s) fill
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
 
@@ -513,7 +506,11 @@
   function loadPreferences() {
     try {
       const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}");
-      if (["blue", "dots"].includes(saved.highlightStyle)) state.highlightStyle = saved.highlightStyle;
+      if (saved.moveStyle && typeof saved.moveStyle === "object") {
+        state.moveStyle = { cubes: !!saved.moveStyle.cubes, dots: !!saved.moveStyle.dots, edges: !!saved.moveStyle.edges };
+      } else if (saved.highlightStyle === "dots") {
+        state.moveStyle = { cubes: false, dots: true, edges: false };   // from the old single choice
+      }
       if (typeof saved.showLines === "boolean") state.showLines = saved.showLines;
       if (typeof saved.enforceTurns === "boolean") state.enforceTurns = saved.enforceTurns;
       if (typeof saved.showGrid === "boolean") byId("show-grid").checked = saved.showGrid;
@@ -529,7 +526,7 @@
   function savePreferences() {
     try {
       localStorage.setItem(PREFERENCES_KEY, JSON.stringify({
-        highlightStyle: state.highlightStyle,
+        moveStyle: state.moveStyle,
         showLines: state.showLines,
         enforceTurns: state.enforceTurns,
         showGrid: byId("show-grid").checked,
@@ -566,7 +563,7 @@
     }
   }
 
-  /** The pieces drawn as selected: the one being moved, or every piece in Available Moves. */
+  /** The pieces drawn as selected: the one being moved, or every piece being explored. */
   function highlightedPieceIds() {
     if (state.showingAvailableMoves) return state.availablePieceIds;
     return state.selectedPieceId ? [state.selectedPieceId] : [];
@@ -586,8 +583,8 @@
           child.material.emissiveIntensity = 0.45;
         }
       });
-      const bounds = new THREE.Box3().setFromObject(pieceObject).expandByScalar(0.06);
-      const box = new THREE.Box3Helper(bounds, new THREE.Color("#e89a12"));
+      // Outline the cell (or, for a pawn, every cell of its row) the piece fills.
+      const box = Scene3D.buildCellOutlines(Rules.cellsOfPiece(findPiece(pieceId)), "#ffb22e");
       viewer.scene.add(box);
       selectionBoxes.push(box);
     }
@@ -599,25 +596,25 @@
     const piece = findPiece(state.selectedPieceId);
     if (!piece) return [];
     if (state.moveMode === "free") return Rules.getFreeMoves(piece, state.game.pieces, state.freePlane);
-    return Rules.getClassicMoves(piece, state.game.pieces);
+    return Rules.getPlayMoves(piece, state.game.pieces);   // classic moves + castling
   }
 
-  /** Each piece chosen in Available Moves, with its classic moves. */
+  /** Each piece chosen in Explore Moves, with its moves (castling included). */
   function availableMoveEntries() {
     return state.availablePieceIds
       .map(findPiece)
       .filter(Boolean)
-      .map((piece) => ({ piece, moves: Rules.getClassicMoves(piece, state.game.pieces) }));
+      .map((piece) => ({ piece, moves: Rules.getPlayMoves(piece, state.game.pieces) }));
   }
 
   function refreshHighlights() {
     disposeGroupContents(highlightLayer);
     if (state.showingAvailableMoves) {
       state.currentMoves = [];
-      highlights = Scene3D.buildAvailableMoves(availableMoveEntries(), state.highlightStyle, look, state.showLines);
+      highlights = Scene3D.buildAvailableMoves(availableMoveEntries(), state.moveStyle, look, state.showLines);
     } else {
       state.currentMoves = computeMoves();
-      highlights = Scene3D.buildMoveHighlights(state.currentMoves, state.highlightStyle, look,
+      highlights = Scene3D.buildMoveHighlights(state.currentMoves, state.moveStyle, look,
         findPiece(state.selectedPieceId), state.showLines);
     }
     highlightLayer.add(highlights.group);
@@ -775,9 +772,38 @@
     if (state.undoStack.length > 300) state.undoStack.shift();
   }
 
+  /**
+   * Slide one piece from where it was to where it is now, lifted into an arc
+   * (`lift` cells high at the middle). Used for the rook when castling: it hops
+   * over the king to the king's other side.
+   */
+  function animateHop(pieceBefore, pieceAfter, lift) {
+    const holder = findPieceObject(pieceAfter.id);
+    if (!holder) return;
+    const start = Scene3D.pieceWorldPosition(pieceBefore);
+    const end = Scene3D.pieceWorldPosition(pieceAfter);
+    const duration = 0.7;
+    let elapsed = 0;
+    function place(fraction) {
+      const eased = easeInOutCubic(fraction);
+      holder.position.lerpVectors(start, end, eased);
+      holder.position.y += Math.sin(Math.PI * eased) * lift;
+    }
+    place(0);
+    animations.push({
+      update(deltaSeconds) {
+        elapsed += deltaSeconds;
+        place(Math.min(1, elapsed / duration));
+        return elapsed >= duration;
+      },
+      finish() { place(1); },
+    });
+  }
+
   function performMove(move) {
     pushUndo();
     const moverBefore = JSON.parse(JSON.stringify(findPiece(move.pieceId)));
+    const rookBefore = move.castle ? JSON.parse(JSON.stringify(findPiece(move.castle.rookId))) : null;
     const takenBefore = state.game.pieces
       .filter((piece) => move.captureIds.includes(piece.id))
       .map((piece) => JSON.parse(JSON.stringify(piece)));
@@ -803,6 +829,10 @@
       byId("promotion-dialog").showModal();
     };
     animateMove(moverBefore, result.piece, takenBefore, railCountsBefore, askAboutPromotion);
+    if (result.castledRook && rookBefore) {
+      animateHop(rookBefore, result.castledRook, 0.9);
+      showToast(capitalize(result.piece.side) + " castles.");
+    }
   }
 
   function choosePromotion(newType) {
@@ -868,7 +898,7 @@
     toggle.setAttribute("aria-expanded", String(!collapsed));
   }
 
-  // ===== Available Moves: several pieces' moves at once =====
+  // ===== Explore Moves: several pieces' moves at once =====
 
   function setShowingAvailableMoves(turnOn) {
     state.showingAvailableMoves = turnOn;
@@ -877,7 +907,7 @@
     refreshAll();
   }
 
-  /** Add a piece to the Available Moves set, or drop it if it is already there. */
+  /** Add a piece to the Explore Moves set, or drop it if it is already there. */
   function toggleAvailablePiece(pieceId) {
     const ids = state.availablePieceIds;
     state.availablePieceIds = ids.includes(pieceId) ? ids.filter((id) => id !== pieceId) : ids.concat(pieceId);
@@ -929,7 +959,7 @@
     setPointerFromEvent(event);
     const picked = pickUnderPointer();
 
-    // Available Moves: clicks only add or drop pieces; nothing moves.
+    // Explore Moves: clicks only add or drop pieces; nothing moves.
     if (state.showingAvailableMoves) {
       if (picked && picked.kind === "piece") toggleAvailablePiece(picked.pieceId);
       return;
@@ -1085,29 +1115,10 @@
     else if (Rules.isInCheck(turn, state.game.pieces)) warning = capitalize(turn) + " is in check!";
     if (state.showingAvailableMoves) {
       const count = state.availablePieceIds.length;
-      text = count === 0 ? "Available moves: click pieces to show their moves"
-        : "Available moves of " + count + " piece" + (count === 1 ? "" : "s");
+      text = count === 0 ? "Exploring moves: click pieces to show their moves"
+        : "Exploring the moves of " + count + " piece" + (count === 1 ? "" : "s");
     }
     byId("status-text").innerHTML = text + (warning ? ' · <span class="warning">' + warning + "</span>" : "");
-  }
-
-  function updateSelectedInfo() {
-    const piece = findPiece(state.selectedPieceId);
-    const info = byId("selected-info");
-    if (!piece) {
-      info.textContent = state.showingAvailableMoves
-        ? "Showing available moves (turn off Select pieces to play)."
-        : "Click a piece to select it.";
-    } else {
-      const moveCount = state.currentMoves.length;
-      const captures = state.currentMoves.filter((move) => move.captureIds.length > 0).length;
-      info.innerHTML = "<b>" + capitalize(piece.side) + " " + piece.type + "</b> at " + Rules.describePlace(piece) +
-        "<br>" + moveCount + " move" + (moveCount === 1 ? "" : "s") +
-        (captures ? ", " + captures + " capture" + (captures === 1 ? "" : "s") : "") +
-        (state.moveMode === "free" ? " on plane " + state.freePlane : "") + ".";
-    }
-    byId("deselect").disabled = !piece;
-    byId("remove-piece").disabled = !piece;
   }
 
   function updateCapturedLists() {
@@ -1130,8 +1141,9 @@
   function updateModeControls() {
     document.querySelectorAll("[data-mode]").forEach((button) =>
       button.classList.toggle("is-on", button.dataset.mode === state.moveMode));
-    document.querySelectorAll("[data-style]").forEach((button) =>
-      button.classList.toggle("is-on", button.dataset.style === state.highlightStyle));
+    document.querySelectorAll("[data-move-style]").forEach((box) => {
+      box.checked = state.moveStyle[box.dataset.moveStyle];
+    });
     byId("enforce-turns").checked = state.enforceTurns;
     byId("enforce-turns").disabled = state.moveMode === "free";
 
@@ -1144,15 +1156,13 @@
       : "Classic moves for each piece. See ABOUT › Pieces for the rules.";
 
     byId("show-lines").checked = state.showLines;
-    byId("select-pieces").classList.toggle("is-on", state.showingAvailableMoves);
-    byId("select-pieces").setAttribute("aria-pressed", String(state.showingAvailableMoves));
-    byId("clear-available").disabled = state.availablePieceIds.length === 0;
+    byId("explore-moves").setAttribute("aria-pressed", String(state.showingAvailableMoves));
+    byId("explore-state").textContent = state.showingAvailableMoves ? "ON" : "OFF";
     byId("undo").disabled = state.undoStack.length === 0;
   }
 
   function updatePanel() {
     updateStatus();
-    updateSelectedInfo();
     updateCapturedLists();
     updateModeControls();
   }
@@ -1169,13 +1179,6 @@
       "<h3>" + PIECE_SYMBOLS[type] + " THE " + type.toUpperCase() + "</h3><p>" + Rules.PIECE_DESCRIPTIONS[type] + "</p>"
     ).join("") +
       '<p class="hint">See every piece and its moves up close in the <a href="game-studio.html">Game Studio</a>.</p>';
-  }
-
-  /** Colour the little legend squares to match the look settings. */
-  function colorAvailableMovesLegend() {
-    byId("legend-red").style.background = look.redMovesColor;
-    byId("legend-black").style.background = look.blackMovesColor;
-    byId("legend-shared").style.background = look.sharedMovesColor;
   }
 
   // ===== Header menus (GAME, ABOUT) =====
@@ -1227,11 +1230,10 @@
       refreshHighlights();
       updatePanel();
     }));
-    document.querySelectorAll("[data-style]").forEach((button) => button.addEventListener("click", () => {
-      state.highlightStyle = button.dataset.style;
+    document.querySelectorAll("[data-move-style]").forEach((box) => box.addEventListener("change", () => {
+      state.moveStyle[box.dataset.moveStyle] = box.checked;
       savePreferences();
       refreshHighlights();
-      updatePanel();
     }));
     byId("enforce-turns").addEventListener("change", (event) => {
       state.enforceTurns = event.target.checked;
@@ -1250,10 +1252,7 @@
       viewer.controls.autoRotateSpeed = 0.6;
     });
 
-    byId("deselect").addEventListener("click", clearSelection);
-    byId("remove-piece").addEventListener("click", removeSelectedPiece);
-    byId("select-pieces").addEventListener("click", () => setShowingAvailableMoves(!state.showingAvailableMoves));
-    byId("clear-available").addEventListener("click", clearAvailableMoves);
+    byId("explore-moves").addEventListener("click", () => setShowingAvailableMoves(!state.showingAvailableMoves));
     byId("show-lines").addEventListener("change", (event) => {
       state.showLines = event.target.checked;
       savePreferences();
@@ -1288,6 +1287,11 @@
         if (state.showingAvailableMoves) clearAvailableMoves();
         else clearSelection();
       }
+      // Delete or Backspace takes the selected piece off the board (the "incorrect move").
+      if ((event.key === "Delete" || event.key === "Backspace") && state.selectedPieceId) {
+        event.preventDefault();
+        removeSelectedPiece();
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); undo(); }
       if (event.key === "[") setFreePlane(state.freePlane - 1);
       if (event.key === "]") setFreePlane(state.freePlane + 1);
@@ -1309,7 +1313,6 @@
     restoreCurrentGame();
     loadPreferences();
     board.userData.cellGrid.visible = byId("show-grid").checked;
-    colorAvailableMovesLegend();
     buildPiecesDialog();
     setUpControls();
     setUpMenus();

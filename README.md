@@ -83,14 +83,17 @@ To look at the pieces up close and change how they look, double-click
   Philosophy, Studio.
 - **The game in progress is kept** in this browser, so going to the Studio and back,
   or reloading, doesn't reset it.
-- **Show moves as** glass cubes or glowing dots, with optional **move lines**: a thin
-  line along each move's path, through every cube it passes.
-- **Available moves**: turn on *Select pieces* and click several pieces (either side)
-  to see all their moves at once. Red's moves are red, Black's white, and cells both
-  sides can reach are purple.
+- **Show moves as** any mix of glass cubes, glowing dots and **cube edges** (a thin
+  outline of each cube), plus optional **move lines**: a thin line along each move's
+  path, through every cube it passes. The selected piece's own cube is outlined in gold.
+- **Castling**, exactly as in 2D chess, along the home edge (see the king below).
+- **Explore moves**: switch it ON and click several pieces (either side) to see all
+  their moves at once. Red's moves are red, Black's white, and cells both sides can
+  reach are purple. Switch it OFF to play again.
 - **Classic or free moves.** Free moves let any piece go anywhere on a chosen plane:
   the original's "incorrect move", so players set the rules, not the program.
-- **Undo** (in the Moves box) and **take a piece off the board**.
+- **Undo** (in the Moves box), and **take a piece off the board** by hand: select it
+  and press **Delete**.
 - **Save** downloads a `.txt` file of the board. **Load** (or drag the file onto the
   board) sets it up again. The file is plain text you can edit by hand to make puzzles.
 
@@ -98,7 +101,7 @@ To look at the pieces up close and change how they look, double-click
 
 | Piece  | Moves |
 |--------|-------|
-| King   | One cube in any of 26 directions |
+| King   | One cube in any of 26 directions. Castles as in 2D chess along its home edge: two cubes toward a rook, which jumps to its other side. Only if neither has moved, the cubes between are empty, and the king is not in check and doesn't cross or land on an attacked cube. |
 | Queen  | Any distance in any of 26 directions |
 | Rook   | Any distance in 18 directions: 6 straight + 12 flat diagonals |
 | Bishop | Any distance in 20 directions: 12 flat diagonals + 8 corner-to-corner diagonals |
@@ -107,7 +110,7 @@ To look at the pieces up close and change how they look, double-click
 
 ## Piece versions
 
-Every piece comes in five versions, chosen per piece in the Studio
+Every piece comes in three versions, chosen per piece in the Studio
 (**Compare versions** shows them side by side):
 
 ![King versions](docs/versions-king.png)
@@ -116,11 +119,13 @@ Every piece comes in five versions, chosen per piece in the Studio
 - **Ornate**: the original shapes, unchanged, dressed with architectural "greebles"
   from wood moldings and mantels: ogee, cove, quarter-round and bead bands, dentil
   courses, fluted pilaster faces and cornice caps.
-- **Faceted**, **Deco**, **Classic**: classic Staunton chess pieces crossed with
-  architectural moldings (torus, scotia, fillet, collar, baluster stem). Each is like
-  two classic pieces joined at their bases, so it reads the same from above and
-  below; the knight is a playing card, one horse head up and one down. Faceted is
-  8-sided and crisp, Deco is angular with fluted stems, Classic is smooth and curved.
+- **Classic**: classic Staunton chess pieces crossed with architectural moldings
+  (torus, scotia, fillet, collar, baluster stem), smooth and curved. Each is like two
+  classic pieces joined at their bases, so it reads the same from above and below.
+  The knight has a sculpted 3D horse head (muzzle, jaw, ears, eyes, mane) at both
+  ends, both facing the same way.
+
+Every knight, in every version, faces the opponent.
 
 Glowing things light up their surroundings: the selected piece casts a warm yellow
 light and the move dots or cubes cast their colour onto nearby pieces.
@@ -145,7 +150,7 @@ The pieces are built in Blender by `blender/build_pieces.py` (also saved as
 `blender/pieces.blend`).
 
 The classic-style versions come from `blender/build_classic_pieces.py` (exports
-`models/<piece>-<faceted|deco|classic>.glb`), the ornate version from
+`models/<piece>-classic.glb`), the ornate version from
 `blender/build_ornate_pieces.py` (`models/<piece>-ornate.glb`).
 
 1. Edit the pieces in Blender, or change the script and run it (Scripting tab → Run).

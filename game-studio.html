@@ -183,9 +183,10 @@
           <button type="button" class="button" id="place-corner">Top-back corner</button>
           <button type="button" class="button" id="place-home">Home edge</button>
         </div>
-        <div class="choice-group" role="group" aria-label="Move highlight style">
-          <button type="button" class="button" data-style="blue">Cubes</button>
-          <button type="button" class="button" data-style="dots">Dots</button>
+        <div class="row">
+          <label class="check"><input type="checkbox" data-move-style="cubes" checked> Cubes</label>
+          <label class="check"><input type="checkbox" data-move-style="dots"> Dots</label>
+          <label class="check"><input type="checkbox" data-move-style="edges"> Edges</label>
         </div>
         <div class="stats" id="move-count"></div>
       </div>
@@ -229,6 +230,7 @@
         <div class="field"><label for="look-blueCubeColor">Blue cubes</label><input type="color" id="look-blueCubeColor" data-look="blueCubeColor"><span></span></div>
         <div class="field"><label for="look-cubeOpacity">Cube see-through</label><input type="range" id="look-cubeOpacity" data-look="cubeOpacity" min="0.1" max="0.9" step="0.01"><output></output></div>
         <div class="field"><label for="look-dotColor">Dots</label><input type="color" id="look-dotColor" data-look="dotColor"><span></span></div>
+        <div class="field"><label for="look-moveEdgeColor">Cube edges</label><input type="color" id="look-moveEdgeColor" data-look="moveEdgeColor"><span></span></div>
         <div class="field"><label for="look-captureColor">Captures</label><input type="color" id="look-captureColor" data-look="captureColor"><span></span></div>
         <div class="field"><label for="look-moveLineColor">Move lines</label><input type="color" id="look-moveLineColor" data-look="moveLineColor"><span></span></div>
         <div class="field"><label for="look-redMovesColor">Red's moves</label><input type="color" id="look-redMovesColor" data-look="redMovesColor"><span></span></div>
@@ -303,7 +305,7 @@
     asset: "queen",
     show: "board",          // "alone", "compare" (every version side by side) or "board"
     side: "red",
-    highlightStyle: "blue",
+    moveStyle: { cubes: true, dots: false, edges: false },   // how moves are shown (any mix)
     cell: { x: 7, y: 0, z: 7 },     // where a piece stands on the board (top-back corner)
     pawn: { file: 3, plane: 7 },    // where a pawn stands on the board
     pawnLength: 3,                  // pawn length when shown on its own
@@ -493,7 +495,7 @@
     const object = Scene3D.buildPieceObject(piece, models, materials, look);
     stage.add(object);
     const moves = Rules.getClassicMoves(piece, [piece]);
-    stage.add(Scene3D.buildMoveHighlights(moves, state.highlightStyle, look, piece, byId("show-lines").checked).group);
+    stage.add(Scene3D.buildMoveHighlights(moves, state.moveStyle, look, piece, byId("show-lines").checked).group);
     byId("move-count").textContent = moves.length + " moves from " + Rules.describePlace(piece) + " on an empty board.";
     return object;
   }
@@ -511,7 +513,7 @@
       // Show the move highlight style on one plane so it can be judged against the board.
       const sample = Rules.planeCells(7).filter((cell) => cell.x % 2 === 0)
         .map((cell) => ({ pieceId: null, to: cell, cells: [cell], captureIds: [] }));
-      stage.add(Scene3D.buildMoveHighlights(sample, state.highlightStyle, look).group);
+      stage.add(Scene3D.buildMoveHighlights(sample, state.moveStyle, look).group);
     }
   }
 
@@ -656,8 +658,9 @@
       button.classList.toggle("is-on", button.dataset.show === state.show));
     document.querySelectorAll("[data-side]").forEach((button) =>
       button.classList.toggle("is-on", button.dataset.side === state.side));
-    document.querySelectorAll("[data-style]").forEach((button) =>
-      button.classList.toggle("is-on", button.dataset.style === state.highlightStyle));
+    document.querySelectorAll("[data-move-style]").forEach((box) => {
+      box.checked = state.moveStyle[box.dataset.moveStyle];
+    });
 
     byId("piece-view-section").hidden = !pieceSelected;
     byId("moves-section").hidden = !pieceSelected || state.show !== "board";
@@ -697,9 +700,8 @@
       updatePanel();
       render();
     }));
-    document.querySelectorAll("[data-style]").forEach((button) => button.addEventListener("click", () => {
-      state.highlightStyle = button.dataset.style;
-      updatePanel();
+    document.querySelectorAll("[data-move-style]").forEach((box) => box.addEventListener("change", () => {
+      state.moveStyle[box.dataset.moveStyle] = box.checked;
       render();
     }));
     byId("pawn-length").addEventListener("input", (event) => {

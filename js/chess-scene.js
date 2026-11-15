@@ -663,14 +663,12 @@ window.ChessScene = (function () {
   // ===== Piece versions =====
   // Each piece comes in several versions (see blender/build_classic_pieces.py):
   // "original" (the 2006-style pieces, models/king.glb) and the classic-styled
-  // "faceted", "deco" and "classic" (models/king-deco.glb ...). look.pieceVersions
+  // "ornate" and "classic" (models/king-ornate.glb, models/king-classic.glb). look.pieceVersions
   // says which one each piece uses.
 
   const PIECE_VERSIONS = [
     { id: "original", label: "Original" },
     { id: "ornate", label: "Ornate" },     // the original shapes with molding details
-    { id: "faceted", label: "Faceted" },
-    { id: "deco", label: "Deco" },
     { id: "classic", label: "Classic" },
   ];
 
@@ -685,7 +683,9 @@ window.ChessScene = (function () {
   }
 
   function versionOf(type, look) {
-    return (look.pieceVersions && look.pieceVersions[type]) || "original";
+    const version = (look.pieceVersions && look.pieceVersions[type]) || "original";
+    // "faceted" and "deco" were retired; their closest relative is "classic".
+    return PIECE_VERSIONS.some((known) => known.id === version) ? version : "classic";
   }
 
   function buildPawnObject(cellCount, models, sideMaterial, trimMaterial, scale, version) {
@@ -728,6 +728,9 @@ window.ChessScene = (function () {
   }
 
   /** Just the piece's shape (not yet placed), coloured for its side. */
+  /** Turns a knight's +X face toward Black's side of the board (-Z). */
+  const KNIGHT_TURN = Math.PI / 2;
+
   function buildPieceShape(side, type, cellCount, models, materials, look, versionOverride) {
     const sideMaterial = materials[side];
     const trimMaterial = materials[side + "Trim"];
@@ -737,7 +740,9 @@ window.ChessScene = (function () {
     const object = cloneModel(pieceModel(models, type, version), sideMaterial, trimMaterial);
     object.scale.setScalar(scale);
     // Black's pieces face the other way, so the two armies mirror each other.
-    if (side === "black") object.rotation.y = Math.PI;
+    // Knights are modelled facing +X (sideways); turn them to face the opponent.
+    if (type === "knight") object.rotation.y = KNIGHT_TURN;
+    if (side === "black") object.rotation.y += Math.PI;
     return object;
   }
 
@@ -850,28 +855,66 @@ window.ChessScene = (function () {
     });
   }
 
+  const CELL_EDGES_GEOMETRY = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+
   /**
-   * One marker for a cell: a glass cube, or a dot with a soft glow around it.
-   * Returns the visible meshes (so hover can enlarge them).
+   * How moves are shown: any mix of glass cubes, glowing dots and cube edges.
+   * Accepts the old single-style strings too ("blue" = cubes, "dots" = dots).
    */
-  function addCellMarker(group, center, style, color, cubeMaterial) {
-    if (style === "dots") {
+  function normalizeMoveStyle(style) {
+    if (style === "dots") return { cubes: false, dots: true, edges: false };
+    if (typeof style === "string") return { cubes: true, dots: false, edges: false };
+    return { cubes: Boolean(style.cubes), dots: Boolean(style.dots), edges: Boolean(style.edges) };
+  }
+
+  /** Thin outlines of whole cells, in cube space (they come out tilted with the board). */
+  function buildCellOutlines(cells, color) {
+    const group = createCubeSpaceGroup();
+    const material = new THREE.LineBasicMaterial({ color, toneMapped: false });
+    for (const cell of cells) {
+      const outline = new THREE.LineSegments(CELL_EDGES_GEOMETRY, material);
+      outline.position.copy(cellToCubeSpace(cell.x, cell.y, cell.z));
+      group.add(outline);
+    }
+    return group;
+  }
+
+  /**
+   * Everything drawn for one cell: a glass cube, a dot with a soft glow, and/or
+   * the cell's edges, as `style` asks. Returns the visible things, each tagged
+   * with userData.kind, so hovering can make them stand out.
+   */
+  function addCellMarker(group, center, style, color, cubeMaterial, edgeColor) {
+    const added = [];
+    if (style.cubes) {
+      const cube = new THREE.Mesh(CUBE_GEOMETRY, cubeMaterial);
+      cube.position.copy(center);
+      cube.renderOrder = 1;
+      cube.userData.kind = "cube";
+      added.push(cube);
+    }
+    if (style.dots) {
       const dot = new THREE.Mesh(DOT_GEOMETRY, new THREE.MeshBasicMaterial({ color, toneMapped: false }));
       dot.position.copy(center);
+      dot.userData.kind = "dot";
       if (!glowTexture) glowTexture = makeGlowTexture();
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({
         map: glowTexture, color, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false,
       }));
       glow.scale.setScalar(0.55);
       glow.position.copy(center);
-      group.add(dot, glow);
-      return [dot, glow];
+      glow.userData.kind = "glow";
+      added.push(dot, glow);
     }
-    const cube = new THREE.Mesh(CUBE_GEOMETRY, cubeMaterial);
-    cube.position.copy(center);
-    cube.renderOrder = 1;
-    group.add(cube);
-    return [cube];
+    if (style.edges) {
+      const edges = new THREE.LineSegments(CELL_EDGES_GEOMETRY,
+        new THREE.LineBasicMaterial({ color: edgeColor, transparent: true, opacity: 0.9, toneMapped: false }));
+      edges.position.copy(center);
+      edges.userData.kind = "edges";
+      added.push(edges);
+    }
+    for (const thing of added) group.add(thing);
+    return added;
   }
 
   /**
@@ -896,12 +939,13 @@ window.ChessScene = (function () {
 
   /**
    * Draw the cells a piece can move to, for playing.
-   *   style: "blue" (glass cubes) or "dots" (glowing dots)
+   *   style: { cubes, dots, edges } — any mix (see normalizeMoveStyle)
    *   piece + showLines: also draw move lines from the piece
    * Returns { group, hitMeshes, setHovered(move) }. Every hit mesh has
    * userData.move, so a click can be turned back into a move.
    */
-  function buildMoveHighlights(moves, style, look, piece, showLines) {
+  function buildMoveHighlights(moves, moveStyle, look, piece, showLines) {
+    const style = normalizeMoveStyle(moveStyle);
     const group = new THREE.Group();
     const cellGroup = createCubeSpaceGroup();
     group.add(cellGroup);
@@ -916,12 +960,13 @@ window.ChessScene = (function () {
     for (const move of moves) {
       const isCapture = move.captureIds.length > 0;
       const color = isCapture ? look.captureColor : look.dotColor;
-      const glowColor = isCapture || style === "dots" ? color : look.blueCubeColor;
+      const glowColor = isCapture || !style.cubes ? color : look.blueCubeColor;
+      const edgeColor = isCapture ? look.captureColor : look.moveEdgeColor;
       const cubeMaterial = isCapture ? captureCubeMaterial : normalCubeMaterial.clone();
       const visibleMeshes = [];
       for (const cell of move.cells) {
         const center = cellToCubeSpace(cell.x, cell.y, cell.z);
-        visibleMeshes.push(...addCellMarker(cellGroup, center, style, color, cubeMaterial));
+        visibleMeshes.push(...addCellMarker(cellGroup, center, style, color, cubeMaterial, edgeColor));
         glowPoints.push({ position: cellToWorld(cell.x, cell.y, cell.z), color: glowColor });
         // An invisible full-size cube makes small dots easy to click.
         const hitBox = new THREE.Mesh(CUBE_GEOMETRY, hitMaterial);
@@ -941,9 +986,11 @@ window.ChessScene = (function () {
       for (const [candidate, meshes] of meshesByMove) {
         const active = candidate === move;
         for (const mesh of meshes) {
-          const baseScale = mesh.isSprite ? 0.55 : 1;
-          mesh.scale.setScalar(active ? baseScale * (mesh.isSprite ? 1.8 : 1.04) : baseScale);
-          if (!mesh.isSprite && style !== "dots" && candidate.captureIds.length === 0) {
+          const kind = mesh.userData.kind;
+          const baseScale = kind === "glow" ? 0.55 : 1;
+          const grow = kind === "glow" ? 1.8 : kind === "dot" ? 1.3 : 1.04;
+          mesh.scale.setScalar(active ? baseScale * grow : baseScale);
+          if (kind === "cube" && candidate.captureIds.length === 0) {
             mesh.material.opacity = active ? Math.min(0.85, look.cubeOpacity + 0.3) : look.cubeOpacity;
           }
         }
@@ -960,7 +1007,8 @@ window.ChessScene = (function () {
    * Red pieces' moves are red, Black's are white, and a cell both sides can
    * reach is purple. Nothing here is clickable: it is only for looking.
    */
-  function buildAvailableMoves(entries, style, look, showLines) {
+  function buildAvailableMoves(entries, moveStyle, look, showLines) {
+    const style = normalizeMoveStyle(moveStyle);
     const group = new THREE.Group();
     const cellGroup = createCubeSpaceGroup();
     group.add(cellGroup);
@@ -986,7 +1034,8 @@ window.ChessScene = (function () {
     const glowPoints = [];
     for (const { cell, sides } of sidesByCell.values()) {
       const which = sides.size > 1 ? "both" : [...sides][0];
-      addCellMarker(cellGroup, cellToCubeSpace(cell.x, cell.y, cell.z), style, colorFor[which], cubeMaterials[which]);
+      addCellMarker(cellGroup, cellToCubeSpace(cell.x, cell.y, cell.z), style, colorFor[which], cubeMaterials[which],
+        colorFor[which]);
       glowPoints.push({ position: cellToWorld(cell.x, cell.y, cell.z), color: colorFor[which] });
     }
 
@@ -1098,6 +1147,7 @@ window.ChessScene = (function () {
     pathLength,
     buildMoveHighlights,
     buildAvailableMoves,
+    buildCellOutlines,
     createGlowLights,
     clusterGlowPoints,
   };

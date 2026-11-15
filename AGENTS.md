@@ -23,15 +23,18 @@ Working and tested in Chrome, both over http and from `file://`:
 - `index.html`: dark theme; play, orbit/pan/zoom (middle- or right-drag pans),
   classic + free moves, animated moves (knight L, sliding, pawns grow/shrink),
   taken pieces pop up on the rose rail, collapsible side panel, Reset view,
-  glass-cube/dot move styles, optional move lines, Available Moves tool
-  (multi-select pieces, red/white/purple), gradient background dome, undo,
+  move styles as checkboxes (glass cubes / glowing dots / cube edges, any mix,
+  `state.moveStyle`), optional move lines, castling, Explore Moves toggle (a single
+  ON/OFF button; multi-select pieces, red/white/purple), the selected piece outlined
+  by its cell edges (`buildCellOutlines`), Delete key takes the selected piece off
+  the board (the Selected box was removed), gradient background dome, undo,
   save/load `.txt`, drag-drop load, check warning, pawn promotion dialog (opens
   after the move animation), move log. Header has GAME and ABOUT drop-down menus;
   side-panel boxes are `<details class="section">`, closed by default, open state
   saved in preferences (`openSections`). The game in progress + last 100 undo steps
   autosave to localStorage `diagonal-3d-chess.current-game` on every `refreshAll()`
   and are restored on load (so visiting the Studio doesn't reset the game). Rose cubes and the place-holder markers were
-  removed (owner's request): Available Moves replaced the markers. Marker lines in
+  removed (owner's request): Explore Moves replaced the markers. Marker lines in
   save files still load and save (rules keep `game.markers`) but are not drawn.
   The 2006 preset-view buttons were removed on purpose (owner's request).
 - `game-studio.html`: view each piece alone or on the board with moves, board and
@@ -81,22 +84,34 @@ Working and tested in Chrome, both over http and from `file://`:
   `setPawnLength`). Any redraw calls `finishAnimations()` first.
 - Haze: `look.haze` (0..1) sets `THREE.FogExp2` density (`HAZE_AT_FULL` = 0.05 at 1),
   fog colour = backgroundColor; the sky dome ignores fog. `viewer.setHaze(amount, color)`.
-- Highlights: `buildMoveHighlights(moves, style, look, piece, showLines)` for play
+- **Castling** (`getCastlingMoves`, `getPlayMoves` = classic + castling; the UI uses
+  getPlayMoves, `isInCheck` still uses getClassicMoves so there is no recursion):
+  2D rules along the home edge, king at x=3 moves to x=1 (rook 0 -> 2) or x=5
+  (rook 7 -> 4). `piece.hasMoved` is set by applyMove/promotePawn and saved as a
+  trailing "moved" on king/rook lines. A castling move carries `move.castle =
+  { rookId, rookTo }`; the rook hops over the king (`animateHop`).
+- Highlights: `style` is `{ cubes, dots, edges }` (old strings "blue"/"dots" still
+  accepted by `normalizeMoveStyle`). `buildMoveHighlights(moves, style, look, piece, showLines)` for play
   (clickable hit boxes); `buildAvailableMoves(entries, style, look, showLines)` for
   the look-only multi-piece view. Lines and dots use `toneMapped: false` to keep
   their exact colours. Background is a camera-following shader dome
   (`createSkyDome`); change its colour with `viewer.setBackgroundColor`.
-- **Piece versions**: `look.pieceVersions[type]` = "original" | "ornate" | "faceted" |
-  "deco" | "classic" (default all "original" until the owner picks). "ornate" =
+- **Piece versions**: `look.pieceVersions[type]` = "original" | "ornate" | "classic"
+  (default all "original" until the owner picks). "faceted" and "deco" were retired
+  2026-11-15; saved looks that still name them fall back to "classic" (`versionOf`).
+  Knights are modelled facing +X; `KNIGHT_TURN` in chess-scene.js turns every knight
+  to face the opponent. "ornate" =
   original geometry + molding greebles (`blender/build_ornate_pieces.py`: molded
   profile bands, dentil rings, reeds/fluting). Its horn collars sit only at the horn
   bases: the original horn rings are skewed, so collars along the curve looked broken. Model keys are
-  `king` (original) or `king-deco` etc.; pawns use `pawn_body-<v>` + `pawn_cap-<v>`.
+  `king` (original) or `king-classic` / `king-ornate`; pawns use `pawn_body-<v>` + `pawn_cap-<v>`.
   `ChessScene.pieceModel` falls back to the original. Classic-style pieces are built
   by `blender/build_classic_pieces.py` (profile + lathe system, mirrored top/bottom,
-  knight = extruded horse outline, playing-card flip). The pawn body must stay 1.0
+  knight = lofted 3D horse head, mirrored so both heads face the same way). It runs
+  headless: `Blender -b blender/pieces.blend --python blender/build_classic_pieces.py`
+  (see its docstring), no MCP paste needed. The pawn body must stay 1.0
   tall (the game stretches it). All versions are bundled, so `models/pieces.js` is
-  ~3.6 MB; once versions are chosen, unused .glb files can be deleted and re-bundled.
+  ~2.3 MB; once versions are chosen, unused .glb files can be deleted and re-bundled.
   The studio has a "Compare versions" view (click a piece to choose it).
 - **Glow lights**: `createGlowLights` keeps a fixed pool of 8 PointLights (never add or
   remove lights at runtime: it recompiles all shaders). The game puts a yellow light in
@@ -140,5 +155,5 @@ Working and tested in Chrome, both over http and from `file://`:
 
 - No checkmate detection or legal-move filtering (by design, but could be optional).
 - Not tested on a real phone yet; layout stacks below 760px.
-- Possible additions: castling/en passant variants, a hand-written puzzle library,
+- Possible additions: en passant, a hand-written puzzle library,
   sharing a game via URL.

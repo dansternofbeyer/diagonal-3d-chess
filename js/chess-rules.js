@@ -44,7 +44,10 @@ window.ChessRules = (function () {
   const BACK_ROW = ["rook", "knight", "bishop", "king", "queen", "bishop", "knight", "rook"];
 
   const PIECE_DESCRIPTIONS = {
-    king: "Moves one cube in any of the 26 directions (6 straight, 12 diagonal, 8 corner-to-corner 3D diagonals).",
+    king: "Moves one cube in any of the 26 directions (6 straight, 12 diagonal, 8 corner-to-corner 3D diagonals). " +
+      "Can castle as in 2D chess, along its home edge: it moves two cubes toward a rook and the rook jumps to its " +
+      "other side. Only if neither has moved, the cubes between them are empty, the king is not in check, and it " +
+      "does not cross or land on an attacked cube.",
     queen: "Moves any number of cubes in any of the 26 directions.",
     rook: "Moves any number of cubes in 18 directions: the 6 straight and the 12 flat diagonals. No 3D diagonals.",
     bishop: "Moves any number of cubes along any diagonal, flat or 3D: 20 directions. No straight lines.",
@@ -337,6 +340,75 @@ window.ChessRules = (function () {
     }
   }
 
+  // ===== Castling =====
+  // The same as 2D chess, along the home edge (the row of cells the back row
+  // starts in: y = z = 0 for Red, 7 for Black). Neither piece leaves that row.
+  // The king (4th cell, x = 3) moves two cells toward a rook, and that rook lands
+  // on the cell the king crossed:
+  //   toward x = 0: king to x = 1, rook to x = 2
+  //   toward x = 7: king to x = 5, rook to x = 4
+  // Allowed only if neither piece has moved, every cell between them is empty,
+  // the king is not in check, and it does not pass through or land on an
+  // attacked cell.
+
+  const KING_START_FILE = BACK_ROW.indexOf("king");
+
+  function homeEdge(side) {
+    return side === "red" ? 0 : LAST_INDEX;
+  }
+
+  /** Is this piece standing on its own starting cell of the home edge? */
+  function isOnStartCell(piece, file) {
+    const edge = homeEdge(piece.side);
+    return piece.x === file && piece.y === edge && piece.z === edge;
+  }
+
+  /** Would `side`'s king be attacked if it stood on cell (x, edge, edge)? */
+  function isCellAttacked(side, king, x, pieces) {
+    const edge = homeEdge(side);
+    const moved = pieces.map((piece) => (piece === king ? Object.assign({}, king, { x, y: edge, z: edge }) : piece));
+    return isInCheck(side, moved);
+  }
+
+  function getCastlingMoves(king, pieces) {
+    if (king.type !== "king" || king.hasMoved || !isOnStartCell(king, KING_START_FILE)) return [];
+    if (isInCheck(king.side, pieces)) return [];
+    const edge = homeEdge(king.side);
+    const occupancy = buildOccupancy(pieces);
+    const moves = [];
+
+    for (const rookFile of [0, LAST_INDEX]) {
+      const rook = pieces.find((piece) => piece.side === king.side && piece.type === "rook" &&
+        !piece.hasMoved && isOnStartCell(piece, rookFile));
+      if (!rook) continue;
+      const direction = rookFile < KING_START_FILE ? -1 : 1;
+
+      // Every cell between the king and the rook must be empty.
+      let pathIsClear = true;
+      for (let x = KING_START_FILE + direction; x !== rookFile; x += direction) {
+        if (occupancy.has(cellKey(x, edge, edge))) pathIsClear = false;
+      }
+      if (!pathIsClear) continue;
+
+      // The king may not cross or land on an attacked cell.
+      const crossedFile = KING_START_FILE + direction;
+      const landingFile = KING_START_FILE + 2 * direction;
+      if (isCellAttacked(king.side, king, crossedFile, pieces)) continue;
+      if (isCellAttacked(king.side, king, landingFile, pieces)) continue;
+
+      const move = makeCellMove(king, landingFile, edge, edge, null);
+      move.castle = { rookId: rook.id, rookTo: { x: crossedFile, y: edge, z: edge } };
+      moves.push(move);
+    }
+    return moves;
+  }
+
+  /** Every move the game offers when playing: the classic moves plus castling. */
+  function getPlayMoves(piece, pieces) {
+    const moves = getClassicMoves(piece, pieces);
+    return piece.type === "king" ? moves.concat(getCastlingMoves(piece, pieces)) : moves;
+  }
+
   /**
    * Free-mode moves: the piece may go to any spot in the chosen plane that is
    * not blocked by its own side. Anything of the other side there is captured.
@@ -400,8 +472,21 @@ window.ChessRules = (function () {
       piece.y = move.to.y;
       piece.z = move.to.z;
     }
+    piece.hasMoved = true;   // kings and rooks that have moved can no longer castle
+
+    let castledRook = null;
+    if (move.castle) {
+      castledRook = game.pieces.find((candidate) => candidate.id === move.castle.rookId) || null;
+      if (castledRook) {
+        castledRook.x = move.castle.rookTo.x;
+        castledRook.y = move.castle.rookTo.y;
+        castledRook.z = move.castle.rookTo.z;
+        castledRook.hasMoved = true;
+      }
+    }
 
     let line = piece.side + " " + piece.type + " " + from + " -> " + describePlace(piece);
+    if (castledRook) line = piece.side + " castles: king " + from + " -> " + describePlace(piece) + ", rook to " + describePlace(castledRook);
     if (capturedPieces.length > 0) {
       line += " takes " + capturedPieces.map((captured) => captured.side + " " + captured.type).join(", ");
     }
@@ -409,7 +494,7 @@ window.ChessRules = (function () {
     game.turn = otherSide(piece.side);
 
     const kingTaken = capturedPieces.find((captured) => captured.type === "king");
-    return { piece, capturedPieces, kingTaken: kingTaken || null, needsPromotion: needsPromotion(piece) };
+    return { piece, capturedPieces, kingTaken: kingTaken || null, needsPromotion: needsPromotion(piece), castledRook };
   }
 
   /** Turn a pawn into another piece, standing in the single cell at the end of its row. */
@@ -420,6 +505,7 @@ window.ChessRules = (function () {
     delete pawn.file;
     delete pawn.plane;
     pawn.type = newType;
+    pawn.hasMoved = true;   // a promoted rook is not the original rook: it cannot castle
     pawn.x = cell.x;
     pawn.y = cell.y;
     pawn.z = cell.z;
@@ -461,6 +547,7 @@ window.ChessRules = (function () {
       "# Red's home edge is y=0 z=0. Black's home edge is y=7 z=7.",
       "# Pawns fill a whole upright row, written as: file <0-7> plane <0-14>  (plane = y + z).",
       "# Piece types: king queen rook bishop knight pawn. Sides: red black.",
+      "# A king or rook line ending in \"moved\" has moved already, so it can no longer castle.",
       "# Marker colours: " + MARKER_COLORS.join(" "),
       "",
       SAVE_FORMAT_LINE,
@@ -472,7 +559,9 @@ window.ChessRules = (function () {
         if (piece.type === "pawn") {
           lines.push("piece: " + side + " pawn file " + piece.file + " plane " + piece.plane);
         } else {
-          lines.push("piece: " + side + " " + piece.type + " at " + piece.x + " " + piece.y + " " + piece.z);
+          // "moved" matters for castling: a king or rook that has moved can't castle.
+          const movedNote = piece.hasMoved && (piece.type === "king" || piece.type === "rook") ? " moved" : "";
+          lines.push("piece: " + side + " " + piece.type + " at " + piece.x + " " + piece.y + " " + piece.z + movedNote);
         }
       }
       lines.push("");
@@ -561,7 +650,9 @@ window.ChessRules = (function () {
             warnings.push("Line " + (index + 1) + " puts a piece off the board: " + line);
             return;
           }
-          game.pieces.push(makePiece(side, type, { x, y, z }));
+          const piece = makePiece(side, type, { x, y, z });
+          if (words.includes("moved")) piece.hasMoved = true;
+          game.pieces.push(piece);
         }
         return;
       }
@@ -609,6 +700,8 @@ window.ChessRules = (function () {
     copyGame,
     buildOccupancy,
     getClassicMoves,
+    getCastlingMoves,
+    getPlayMoves,
     getFreeMoves,
     applyMove,
     promotePawn,

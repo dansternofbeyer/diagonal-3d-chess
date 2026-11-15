@@ -24,7 +24,7 @@ window.CHESS_LOOK_DEFAULTS = {
   // Size of each piece inside its cell (1 = as modelled in Blender)
   pieceScale: { king: 1, queen: 1, rook: 1, bishop: 1, knight: 1, pawn: 1 },
 
-  // Which version of each piece to use: "original", "ornate", "faceted", "deco" or "classic"
+  // Which version of each piece to use: "original", "ornate" or "classic"
   // (compare them in the studio's "Compare versions" view).
   pieceVersions: { king: "original", queen: "original", rook: "original",
     bishop: "original", knight: "original", pawn: "original" },
@@ -43,6 +43,7 @@ window.CHESS_LOOK_DEFAULTS = {
   dotColor: "#2bb8f0",
   cubeOpacity: 0.4,
   moveLineColor: "#3da5ff",   // the thin "move lines" along each path
+  moveEdgeColor: "#4fb3ff",   // "Cube edges": the outline of each cell a piece can move to
 
   // Available Moves tool: several pieces' moves at once
   redMovesColor: "#ff3b2a",
