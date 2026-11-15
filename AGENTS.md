@@ -84,7 +84,8 @@ Working and tested in Chrome, both over http and from `file://`:
   `setPawnLength`). Any redraw calls `finishAnimations()` first.
 - **Wood finish** (`look.pieceFinish` = "wood" default | "lacquer"): procedural grain
   in the piece shader (`WOOD_SHADER_FUNCTIONS`, `addPieceShader` in chess-scene.js),
-  from object-space position (models have no UVs, so photos can't be mapped). Wood
+  from object-space position x2 (models have no UVs, so photos can't be mapped;
+  the x2 in `woodColor(vWoodPosition * 2.0)` sets the grain size). Wood
   colours `redWoodLight/Dark`, `blackWoodLight/Dark` are converted sRGB -> linear
   (unconverted they wash out). `addPieceShader` also holds the rim light; clone piece
   materials with `clonePieceMaterial` to keep both.
@@ -114,8 +115,10 @@ Working and tested in Chrome, both over http and from `file://`:
   `king` (original) or `king-classic` / `king-ornate`; pawns use `pawn_body-<v>` + `pawn_cap-<v>`.
   `ChessScene.pieceModel` falls back to the original. Classic-style pieces are built
   by `blender/build_classic_pieces.py` (profile + lathe system, mirrored top/bottom,
-  knight = lofted 3D horse head with separate jaw/forehead widths, features placed
-  with `head_point`, mirrored so both heads face the same way). It runs
+  knight = carved horse traced from the photo `docs/wooden-chess-piece-knight-horse-head-png.webp`
+  (git-ignored): `HORSE_SLICES` are horizontal slices in the photo's pixels, turned into
+  units by `HORSE_UNIT`; features placed with `surface_point`, carved ridges with
+  `add_carved_line`; mirrored so both heads face the same way). It runs
   headless: `Blender -b blender/pieces.blend --python blender/build_classic_pieces.py`
   (see its docstring), no MCP paste needed. The pawn body must stay 1.0
   tall (the game stretches it). All versions are bundled, so `models/pieces.js` is

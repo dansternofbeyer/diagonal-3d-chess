@@ -377,89 +377,120 @@ def build_rook(mesh_data, style):
 
 
 # ===== The knight's horse head =====
-# A real 3D head, lofted like a ship's hull: a series of cross-sections along a
-# spine that rises up an arched neck, turns at the poll (between the ears) and
-# runs forward and down to the muzzle, like a carved Staunton knight. Each
-# section has its own width and its own depth above and below the spine, which
-# gives a horse's shape (see the reference photos of a horse's head in profile):
-#   - a long, flat face from forehead to nose
-#   - a big, round jowl (the jaw) under the eye, then a slim throat behind it
-#   - a muzzle that swells a little, with flared nostrils and a soft chin
-# Eyes are small almond shapes set into the head under a brow, not balls.
+# Modelled on a carved wooden Staunton knight seen side on (the reference photo
+# docs/wooden-chess-piece-knight-horse-head-png.webp, which is not in the repo):
+#   - a broad, rounded chest that rises from the collar and swells forward
+#   - a neck that curves in under the jaw (the throat)
+#   - a head turned forward and down: flat forehead, a long face, a rounded
+#     muzzle with a nostril, a mouth line and a soft chin
+#   - a big round jowl behind the mouth, a small carved almond eye under a brow
+#   - two upright pointed ears at the poll and a forelock between them
+#   - a tall mane down the back of the neck, carved in slanting strands
+#
+# The body is built from horizontal slices stacked from the collar to the poll,
+# like a carver's contour lines. Each slice is a rounded loop running from the
+# front of the silhouette to the back, with its own width at the front, the
+# middle and the back. Outlines were traced from the photo in its own pixels
+# (a 680 x 920 close-up of the head): HORSE_UNIT turns them into Blender units.
 # The head faces +X; the game turns the knight so it faces the opponent.
 
-# (x, z) of the spine, half width over the top (forehead / crest), half width
-# underneath (jaw / throat), depth above the spine and depth below it.
-# The jaw is wider and deeper than the forehead near the eye: that is the jowl.
-HORSE_SECTIONS = [
-    (-0.020, 0.165, 0.085, 0.085, 0.105, 0.105),   # 0 base of the neck (hidden in the collar)
-    (-0.048, 0.250, 0.060, 0.064, 0.098, 0.076),   # 1 neck: arched crest behind
-    (-0.056, 0.325, 0.054, 0.056, 0.086, 0.052),   # 2 throat latch: slim under the jaw
-    (-0.046, 0.385, 0.056, 0.060, 0.070, 0.052),   # 3 poll, turning forward
-    (-0.010, 0.432, 0.062, 0.078, 0.052, 0.092),   # 4 behind the eye: the jowl
-    (0.050, 0.452, 0.064, 0.080, 0.042, 0.110),    # 5 eye, deepest jaw
-    (0.105, 0.430, 0.054, 0.060, 0.036, 0.082),    # 6 below the cheek
-    (0.150, 0.393, 0.046, 0.046, 0.034, 0.062),    # 7 long, flat face
-    (0.190, 0.356, 0.043, 0.043, 0.034, 0.054),    # 8 bridge of the nose
-    (0.222, 0.325, 0.046, 0.047, 0.036, 0.056),    # 9 muzzle swells a little
-    (0.246, 0.302, 0.043, 0.044, 0.032, 0.050),    # 10
-    (0.262, 0.288, 0.034, 0.035, 0.024, 0.038),    # 11 the nose rounds off
-    (0.271, 0.279, 0.018, 0.018, 0.012, 0.020),    # 12
+HORSE_UNIT = 0.0005             # Blender units per traced pixel
+HORSE_CENTER_PIXEL = 340        # the traced x that sits over the piece's axis
+HORSE_BASE_PIXEL = 890          # the traced y of the collar (bottom of the neck)
+HORSE_BASE_HEIGHT = 0.205       # where the collar is on the piece
+HORSE_LOOP_POINTS = 28          # points around each slice
+
+# Traced pixel y of the slice, pixel x of its front and back edge, then the half
+# widths (Blender units) at its front, middle and back.
+HORSE_SLICES = [
+    (920, 108, 605, 0.085, 0.100, 0.080),   # buried in the collar
+    (890, 105, 605, 0.085, 0.100, 0.080),   # base of the neck
+    (850, 90, 605, 0.082, 0.098, 0.075),
+    (800, 85, 605, 0.080, 0.095, 0.070),    # the chest, swelling forward
+    (750, 88, 600, 0.075, 0.090, 0.064),
+    (700, 100, 595, 0.068, 0.084, 0.058),
+    (650, 130, 590, 0.060, 0.078, 0.052),
+    (600, 170, 595, 0.054, 0.074, 0.048),
+    (560, 200, 600, 0.050, 0.071, 0.044),
+    (520, 225, 605, 0.046, 0.070, 0.040),   # the throat, under the jaw
+    (500, 205, 610, 0.040, 0.070, 0.037),
+    (490, 165, 612, 0.036, 0.071, 0.036),   # underside of the jaw, rising to the chin
+    (480, 115, 615, 0.034, 0.072, 0.035),
+    (465, 75, 617, 0.034, 0.073, 0.034),    # lower lip
+    (450, 60, 618, 0.035, 0.073, 0.033),    # mouth
+    (430, 50, 618, 0.036, 0.072, 0.032),
+    (410, 42, 617, 0.038, 0.071, 0.031),
+    (390, 38, 616, 0.039, 0.070, 0.030),    # nostril, front of the nose
+    (370, 42, 614, 0.039, 0.069, 0.030),
+    (350, 55, 612, 0.039, 0.068, 0.029),
+    (320, 78, 608, 0.040, 0.066, 0.028),    # bridge of the nose
+    (290, 100, 604, 0.041, 0.064, 0.027),
+    (260, 125, 595, 0.042, 0.062, 0.026),
+    (230, 150, 582, 0.043, 0.059, 0.025),   # eye level
+    (200, 175, 565, 0.044, 0.056, 0.025),
+    (170, 200, 545, 0.045, 0.052, 0.024),   # forehead
+    (140, 228, 520, 0.044, 0.048, 0.023),
+    (110, 255, 490, 0.041, 0.044, 0.022),
+    (85, 275, 455, 0.036, 0.039, 0.020),    # the poll, between the ears
+    (68, 295, 420, 0.026, 0.029, 0.016),
+    (60, 320, 390, 0.014, 0.016, 0.010),
 ]
-HORSE_SIDES = 16
 
 
-def horse_frames():
-    """Spine point, forward direction and 'up' direction (towards the mane or
-    forehead) for every section."""
-    frames = []
-    count = len(HORSE_SECTIONS)
-    for index in range(count):
-        before = HORSE_SECTIONS[max(0, index - 1)]
-        after = HORSE_SECTIONS[min(count - 1, index + 1)]
-        forward = Vector((after[0] - before[0], 0, after[1] - before[1])).normalized()
-        up = forward.cross(Vector((0, 1, 0))).normalized()
-        section = HORSE_SECTIONS[index]
-        frames.append((Vector((section[0], 0, section[1])), forward, up))
-    return frames
+def horse_height(pixel_y):
+    return HORSE_BASE_HEIGHT + (HORSE_BASE_PIXEL - pixel_y) * HORSE_UNIT
 
 
-def head_point(frames, along, side, height):
-    """A point on (or near) the head's surface, for placing features.
-    along: section number (can be a fraction). side: -1..1 across the head.
-    height: -1 (throat/jaw) .. 1 (mane/forehead)."""
-    lower = min(int(along), len(HORSE_SECTIONS) - 2)
-    mix = along - lower
-    spine = frames[lower][0].lerp(frames[lower + 1][0], mix)
-    forward = frames[lower][1].lerp(frames[lower + 1][1], mix).normalized()
-    up = frames[lower][2].lerp(frames[lower + 1][2], mix).normalized()
-    section = [near + (far - near) * mix for near, far in zip(HORSE_SECTIONS[lower], HORSE_SECTIONS[lower + 1])]
-    half_width = section_half_width(section, height)
-    depth = section[4] if height > 0 else section[5]
-    return spine + Vector((0, 1, 0)) * (half_width * side) + up * (depth * height), forward, up
+def horse_x(pixel_x):
+    return (HORSE_CENTER_PIXEL - pixel_x) * HORSE_UNIT
 
 
-def section_half_width(section, height):
-    """The head's half width at a height (-1 under the jaw .. 1 on the forehead):
-    blends smoothly between the jaw width and the forehead width."""
-    blend = (height + 1) / 2
+def slice_at(pixel_y):
+    """The slice at any height, blended from the two traced slices around it."""
+    for upper, lower in zip(HORSE_SLICES[1:], HORSE_SLICES):
+        if upper[0] <= pixel_y <= lower[0]:
+            mix = (lower[0] - pixel_y) / (lower[0] - upper[0])
+            return [near + (far - near) * mix for near, far in zip(lower, upper)]
+    return list(HORSE_SLICES[0] if pixel_y > HORSE_SLICES[0][0] else HORSE_SLICES[-1])
+
+
+def slice_half_width(horse_slice, along):
+    """Half width at `along` (0 = front edge, 1 = back edge): a smooth blend of
+    the front, middle and back widths."""
+    front, middle, back = horse_slice[3], horse_slice[4], horse_slice[5]
+    if along < 0.5:
+        blend = along * 2
+        blend = blend * blend * (3 - 2 * blend)
+        return front + (middle - front) * blend
+    blend = (along - 0.5) * 2
     blend = blend * blend * (3 - 2 * blend)
-    return section[3] + (section[2] - section[3]) * blend
+    return middle + (back - middle) * blend
 
 
-def frame_matrix(forward, up):
-    """A rotation whose X axis points along `forward`, Z along `up`, Y across."""
-    across = up.cross(forward).normalized()
-    return Matrix((
-        (forward.x, across.x, up.x, 0),
-        (forward.y, across.y, up.y, 0),
-        (forward.z, across.z, up.z, 0),
-        (0, 0, 0, 1),
-    ))
+def loop_point(horse_slice, angle):
+    """A point on a slice's rounded loop. angle 0 = front edge, pi = back edge;
+    0..pi is the +Y side, pi..2pi the -Y side."""
+    along = (1 - math.cos(angle)) / 2
+    across = math.sin(angle)
+    half_width = slice_half_width(horse_slice, along)
+    x = horse_x(horse_slice[1] + (horse_slice[2] - horse_slice[1]) * along)
+    # A square-ish loop (power 0.5): flat cheeks and sides, rounded edges.
+    y = half_width * math.copysign(abs(across) ** 0.5, across)
+    return Vector((x, y, horse_height(horse_slice[0])))
+
+
+def surface_point(pixel_x, pixel_y, side, sink=0.0):
+    """The point on the horse's side at a traced pixel (side +1 or -1),
+    pushed `sink` units into the wood."""
+    horse_slice = slice_at(pixel_y)
+    along = (pixel_x - horse_slice[1]) / (horse_slice[2] - horse_slice[1])
+    along = min(0.999, max(0.001, along))
+    point = loop_point(horse_slice, math.acos(1 - 2 * along))
+    return Vector((point.x, side * (abs(point.y) - sink), point.z))
 
 
 def add_ellipsoid(mesh_data, center, rotation, radii, flip, material=BODY, segments=12):
-    """A squashed ball, turned by `rotation`, for jowls, eyes, brows, nostrils."""
+    """A squashed ball, turned by `rotation`, for jowls, eyes, nostrils, locks."""
     matrix = (flip @ Matrix.Translation(center) @ rotation
               @ Matrix.Diagonal((radii[0], radii[1], radii[2], 1)))
     faces_before = set(mesh_data.faces)
@@ -468,92 +499,124 @@ def add_ellipsoid(mesh_data, center, rotation, radii, flip, material=BODY, segme
     tag_new_faces(mesh_data, faces_before, material)
 
 
-def add_horse_head(mesh_data, mirror):
-    """The head and neck with ears, eyes, brows, nostrils, mouth, chin, jowls and
-    mane. `mirror` reflects it below the middle (z -> -z), so the lower head faces
-    the same way as the upper one."""
-    flip = Matrix.Diagonal((1, 1, -1, 1)) if mirror else Matrix.Identity(4)
-    frames = horse_frames()
-    side_axis = Vector((0, 1, 0))
+def add_horse_body(mesh_data, flip):
+    """Stack the slices into one closed, rounded body."""
     faces_before = set(mesh_data.faces)
-
     rings = []
-    for (spine, forward, up), section in zip(frames, HORSE_SECTIONS):
-        above, below = section[4], section[5]
+    for horse_slice in HORSE_SLICES:
         ring = []
-        for step in range(HORSE_SIDES):
-            angle = step * 2 * math.pi / HORSE_SIDES
-            across = math.sin(angle)
-            upward = math.cos(angle)
-            # Flat sides and a flat face (a superellipse), like a real horse's head;
-            # wider at the jaw than at the forehead where the section says so.
-            lateral = section_half_width(section, upward) * math.copysign(abs(across) ** 0.6, across)
-            vertical = (above if upward > 0 else below) * math.copysign(abs(upward) ** 0.8, upward)
-            ring.append(mesh_data.verts.new(flip @ (spine + side_axis * lateral + up * vertical)))
+        for step in range(HORSE_LOOP_POINTS):
+            angle = step * 2 * math.pi / HORSE_LOOP_POINTS
+            ring.append(mesh_data.verts.new(flip @ loop_point(horse_slice, angle)))
         rings.append(ring)
     for index in range(len(rings) - 1):
-        for step in range(HORSE_SIDES):
-            following = (step + 1) % HORSE_SIDES
+        for step in range(HORSE_LOOP_POINTS):
+            following = (step + 1) % HORSE_LOOP_POINTS
             mesh_data.faces.new((rings[index][step], rings[index][following],
                                  rings[index + 1][following], rings[index + 1][step]))
-    mesh_data.faces.new(list(reversed(rings[0])))
-    # A soft, rounded nose: the last ring closes to a point just ahead of it.
-    tip_spine, tip_forward, _ = frames[-1]
-    tip = mesh_data.verts.new(flip @ (tip_spine + tip_forward * 0.008))
-    for step in range(HORSE_SIDES):
-        following = (step + 1) % HORSE_SIDES
-        mesh_data.faces.new((rings[-1][step], rings[-1][following], tip))
+    mesh_data.faces.new(rings[0])
+    # The top of the head closes to a soft ridge between the ears.
+    top_slice = HORSE_SLICES[-1]
+    top = mesh_data.verts.new(flip @ Vector((horse_x((top_slice[1] + top_slice[2]) / 2), 0,
+                                             horse_height(top_slice[0] - 6))))
+    for step in range(HORSE_LOOP_POINTS):
+        following = (step + 1) % HORSE_LOOP_POINTS
+        mesh_data.faces.new((rings[-1][step], rings[-1][following], top))
     tag_new_faces(mesh_data, faces_before, BODY)
 
+
+def turn_in_side_plane(degrees):
+    """A rotation in the side (XZ) plane: tilts a feature's long axis up or down."""
+    return Matrix.Rotation(math.radians(-degrees), 4, "Y")
+
+
+def add_carved_line(mesh_data, pixel_points, side, flip, height=0.0035):
+    """A carved ridge along the horse's side, through traced pixel points: a
+    chain of long, thin ovals that stand `height` proud of the surface."""
+    for start, end in zip(pixel_points, pixel_points[1:]):
+        steps = 4
+        for step in range(steps):
+            mix_a = step / steps
+            mix_b = (step + 1) / steps
+            point_a = surface_point(start[0] + (end[0] - start[0]) * mix_a,
+                                    start[1] + (end[1] - start[1]) * mix_a, side, 0.0)
+            point_b = surface_point(start[0] + (end[0] - start[0]) * mix_b,
+                                    start[1] + (end[1] - start[1]) * mix_b, side, 0.0)
+            middle = (point_a + point_b) / 2
+            length = (point_b - point_a).length
+            tilt = math.degrees(math.atan2(point_b.z - point_a.z, point_b.x - point_a.x))
+            add_ellipsoid(mesh_data, middle - Vector((0, side * 0.004, 0)), turn_in_side_plane(tilt),
+                          (length * 1.1, 0.004 + height, 0.004), flip, segments=8)
+
+
+def add_horse_head(mesh_data, mirror):
+    """The whole carved horse: body, then features on both sides. `mirror`
+    reflects it below the middle (z -> -z), so the lower head faces the same way."""
+    flip = Matrix.Diagonal((1, 1, -1, 1)) if mirror else Matrix.Identity(4)
+    add_horse_body(mesh_data, flip)
+
     for side in (1, -1):
-        # The jowl: the broad, flat round of the jaw, blended into the cheek.
-        point, forward, up = head_point(frames, 4.9, side * 0.62, -0.5)
-        add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.062, 0.026, 0.058), flip, segments=16)
+        # The jowl: the round of the jaw, carved as a raised edge like the photo,
+        # from under the eye, around the back of the jaw, to the throat.
+        add_carved_line(mesh_data, [(300, 285), (365, 300), (405, 345), (412, 405),
+                                    (385, 455), (320, 482)], side, flip)
+        # The cheek bone, from below the eye down the face toward the nose.
+        add_carved_line(mesh_data, [(255, 270), (200, 310), (140, 350)], side, flip)
+        # Eye: a small carved almond under a heavy lid.
+        add_ellipsoid(mesh_data, surface_point(285, 245, side, 0.003), turn_in_side_plane(-12),
+                      (0.017, 0.005, 0.0075), flip, TRIM, 12)
+        add_ellipsoid(mesh_data, surface_point(282, 229, side, 0.004), turn_in_side_plane(-12),
+                      (0.025, 0.007, 0.006), flip, segments=10)
 
-        # Eye: a small almond, almost flush with the side of the head, under a soft brow.
-        point, forward, up = head_point(frames, 5.3, side * 0.98, -0.02)
-        add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.016, 0.0035, 0.008), flip, TRIM, 12)
-        point, forward, up = head_point(frames, 5.2, side * 0.96, 0.3)
-        add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.028, 0.006, 0.006), flip, segments=10)
+        # Nostril: a dark oval set into a flared rim at the front of the nose.
+        add_ellipsoid(mesh_data, surface_point(78, 392, side, 0.006), turn_in_side_plane(-60),
+                      (0.017, 0.012, 0.014), flip, segments=12)
+        add_ellipsoid(mesh_data, surface_point(70, 392, side, -0.004), turn_in_side_plane(-60),
+                      (0.009, 0.004, 0.006), flip, TRIM, 10)
 
-        # Nostril: a gentle flare at the side of the nose.
-        point, forward, up = head_point(frames, 10.1, side * 0.82, 0.2)
-        tilt = frame_matrix(forward, up) @ Matrix.Rotation(math.radians(side * 15), 4, "Z")
-        add_ellipsoid(mesh_data, point, tilt, (0.014, 0.005, 0.01), flip, segments=10)
+        # Ears: upright and pointed, the near one a little ahead of the far one.
+        ear_base = surface_point(305, 82, side, 0.014)
+        ear_tilt = (Matrix.Rotation(math.radians(8), 4, "Y")
+                    @ Matrix.Rotation(math.radians(side * -12), 4, "X"))
+        add_ellipsoid(mesh_data, ear_base, ear_tilt @ Matrix.Translation((0, 0, 0.026)),
+                      (0.016, 0.009, 0.036), flip, segments=12)
 
-        # Ears: leaf-shaped, pointed and upright, standing at the poll.
-        point, forward, up = head_point(frames, 3.2, side * 0.5, 0.85)
-        matrix = (flip @ Matrix.Translation(point) @ Matrix.Rotation(math.radians(-6), 4, "Y")
-                  @ Matrix.Rotation(math.radians(side * -8), 4, "X") @ Matrix.Translation((0, 0, 0.04))
-                  @ Matrix.Diagonal((1.5, 0.55, 1.0, 1)))
-        faces_before = set(mesh_data.faces)
-        bmesh.ops.create_cone(mesh_data, cap_ends=True, cap_tris=False, segments=12,
-                              radius1=0.02, radius2=0.002, depth=0.085, matrix=matrix)
-        tag_new_faces(mesh_data, faces_before, BODY)
+        # Chest muscles: the carved line where the neck meets the chest.
+        add_carved_line(mesh_data, [(250, 545), (200, 610), (170, 690), (175, 770), (205, 840)], side, flip)
+        # The mane: slanting carved strands down the back of the neck, from the
+        # poll to the shoulders, each sweeping forward and down from the crest.
+        for strand in range(15):
+            pixel_y = 120 + strand * 34
+            back_edge = slice_at(pixel_y)[2]
+            add_ellipsoid(mesh_data, surface_point(back_edge - 38, pixel_y + 10, side, 0.004),
+                          turn_in_side_plane(-55), (0.03, 0.006, 0.0055), flip, segments=10)
+        # The front edge of the mane: a ridge where it lies on the neck.
+        for step in range(9):
+            pixel_y = 150 + step * 55
+            back_edge = slice_at(pixel_y)[2]
+            add_ellipsoid(mesh_data, surface_point(back_edge - 85, pixel_y, side, 0.006),
+                          turn_in_side_plane(-80), (0.034, 0.008, 0.006), flip, segments=10)
 
-    # Chin: the soft round of the lower lip, under the nose.
-    point, forward, up = head_point(frames, 10.0, 0, -0.8)
-    add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.026, 0.03, 0.015), flip, segments=12)
-
-    # The mouth: a fine line where the lips meet.
-    point, forward, up = head_point(frames, 10.3, 0, -0.35)
-    matrix = (flip @ Matrix.Translation(point) @ frame_matrix(forward, up)
-              @ Matrix.Diagonal((0.04, 0.084, 0.003, 1)))
+    # The mouth: a fine line where the lips meet, through the muzzle.
+    mouth = Vector((horse_x(102), 0, horse_height(452)))
+    matrix = flip @ Matrix.Translation(mouth) @ turn_in_side_plane(-8) @ Matrix.Diagonal((0.026, 0.074, 0.003, 1))
     faces_before = set(mesh_data.faces)
     bmesh.ops.create_cube(mesh_data, size=1.0, matrix=matrix)
     tag_new_faces(mesh_data, faces_before, TRIM)
 
-    # Mane: carved locks lying along the arched crest, overlapping like the
-    # carving on a wooden knight, swept back and alternating a little side to side.
-    for index in range(14):
-        along = 0.2 + index * (3.1 / 13)
-        point, forward, up = head_point(frames, along, (0.18 if index % 2 else -0.18), 1.0)
-        matrix = (flip @ Matrix.Translation(point - up * 0.006) @ frame_matrix(forward, up)
-                  @ Matrix.Rotation(math.radians(-28), 4, "Y"))
-        add_ellipsoid(mesh_data, Vector((0, 0, 0)), matrix, (0.03, 0.03, 0.012), Matrix.Identity(4), segments=10)
-    # Forelock: a small tuft between the ears.
-    point, forward, up = head_point(frames, 3.6, 0, 1.0)
-    add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.03, 0.022, 0.012), flip, segments=10)
+    # Chin: the soft round of the lower lip.
+    add_ellipsoid(mesh_data, Vector((horse_x(135), 0, horse_height(478))), turn_in_side_plane(-10),
+                  (0.022, 0.03, 0.012), flip, segments=12)
+
+    # Forelock: a tuft lying forward over the forehead, between the ears.
+    add_ellipsoid(mesh_data, Vector((horse_x(250), 0, horse_height(112))), turn_in_side_plane(-40),
+                  (0.042, 0.02, 0.007), flip, segments=12)
+    # Crest of the mane: a row of lock tips along the back edge.
+    for lock in range(12):
+        pixel_y = 100 + lock * 45
+        back_edge = slice_at(pixel_y)[2]
+        add_ellipsoid(mesh_data, Vector((horse_x(back_edge - 6), 0, horse_height(pixel_y))),
+                      turn_in_side_plane(-55), (0.02, 0.012, 0.008), flip, segments=10)
 
 
 def build_knight(mesh_data, style):

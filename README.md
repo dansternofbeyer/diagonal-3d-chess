@@ -123,9 +123,10 @@ Every piece comes in three versions, chosen per piece in the Studio
 - **Classic**: classic Staunton chess pieces crossed with architectural moldings
   (torus, scotia, fillet, collar, baluster stem), smooth and curved. Each is like two
   classic pieces joined at their bases, so it reads the same from above and below.
-  The knight has a sculpted 3D horse head at both ends, both facing the same way:
-  a long flat face, a rounded jowl, a soft muzzle with nostrils and chin, small
-  almond eyes under a brow, upright ears and a carved mane.
+  The knight is a carved horse at both ends, both facing the same way, modelled on
+  a carved wooden Staunton knight: a broad chest, a neck that curves in under the
+  jaw, a long face with a nostril, mouth and chin, a carved jowl and almond eye,
+  upright ears, a forelock and a tall mane carved in slanting strands.
 
 Every knight, in every version, faces the opponent.
 
