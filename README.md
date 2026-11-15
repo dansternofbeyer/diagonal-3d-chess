@@ -9,8 +9,17 @@ thesis in Macromedia Director 3D (Maya models, Lingo code). Original site:
 The board is an 8 × 8 × 8 cube tilted 45° so one edge points at each player.
 Pawns fill a whole upright row of cubes and **grow** as they cross the board.
 
+## Play online
+
+[![Play in your browser](https://img.shields.io/badge/%E2%96%B6%20Play%20in%20your%20browser-online-f2b544?style=for-the-badge)](https://dansternofbeyer.github.io/diagonal-3d-chess/)
+
+The quickest way to try it: click the button above and the game opens in your
+browser. Nothing to download. (The piece studio is at
+[game-studio.html](https://dansternofbeyer.github.io/diagonal-3d-chess/game-studio.html).)
+
 ## Download and play
 
+Want to keep it, or play without internet? Download it instead.
 No account, no install and no internet needed once it's downloaded.
 It works on Mac and Windows computers, in Chrome, Edge, Firefox or Safari.
 

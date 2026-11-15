@@ -13,6 +13,7 @@ allows "incorrect" moves (Free moves mode, taking pieces off by hand).
 ## Current state (2026-11-14)
 
 Repository: https://github.com/dansternofbeyer/diagonal-3d-chess (public, branch `main`).
+Live site (GitHub Pages, from `main` root, `.nojekyll`): https://dansternofbeyer.github.io/diagonal-3d-chess/
 Commits use the GitHub noreply email (set in this repo's git config), not a personal one.
 Third-party reference photos in docs/ are git-ignored on purpose (see .gitignore).
 The README's "Download and play" section is written for people new to GitHub: keep it
