@@ -79,8 +79,8 @@ To look at the pieces up close and change how they look, double-click
 - **Hide options** (top right) gives the board the whole window; **Reset view** goes
   back to the starting camera. Each options box opens and closes from its heading
   (all start closed) and remembers its state.
-- **GAME** menu (top): New game, Save, Load. **ABOUT** menu: How to play, Pieces,
-  Philosophy, Studio.
+- **GAME** menu (top): New game, Save, Load. **STUDIO** opens the Game Studio.
+  **ABOUT** menu: How to play, Pieces, Philosophy.
 - **The game in progress is kept** in this browser, so going to the Studio and back,
   or reloading, doesn't reset it.
 - **Show moves as** any mix of glass cubes, glowing dots and **cube edges** (a thin

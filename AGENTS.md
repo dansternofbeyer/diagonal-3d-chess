@@ -29,7 +29,7 @@ Working and tested in Chrome, both over http and from `file://`:
   by its cell edges (`buildCellOutlines`), Delete key takes the selected piece off
   the board (the Selected box was removed), gradient background dome, undo,
   save/load `.txt`, drag-drop load, check warning, pawn promotion dialog (opens
-  after the move animation), move log. Header has GAME and ABOUT drop-down menus;
+  after the move animation), move log. Header has GAME and ABOUT drop-down menus and a STUDIO link (`.nav-link`);
   side-panel boxes are `<details class="section">`, closed by default, open state
   saved in preferences (`openSections`). The game in progress + last 100 undo steps
   autosave to localStorage `diagonal-3d-chess.current-game` on every `refreshAll()`

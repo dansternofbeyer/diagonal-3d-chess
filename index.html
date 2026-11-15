@@ -57,13 +57,15 @@
   .site-title b { font-weight: normal; color: var(--ink); }
   .site-nav { display: flex; gap: 4px; }
 
-  /* Drop-down menus in the header (GAME, ABOUT) */
+  /* Drop-down menus in the header (GAME, ABOUT); STUDIO is a plain link */
   .menu { position: relative; }
-  .menu-button {
+  .menu-button, .nav-link {
     border: 1px solid var(--rule); background: var(--surface); color: var(--link);
     padding: 3px 12px; cursor: pointer; font-size: 11px; letter-spacing: 0.06em;
   }
-  .menu-button:hover, .menu-button[aria-expanded="true"] { background: var(--banner-soft); }
+  .menu-button:hover, .menu-button[aria-expanded="true"], .nav-link:hover { background: var(--banner-soft); }
+  /* A plain link in the header, styled like the menu buttons (STUDIO) */
+  .nav-link { display: inline-flex; align-items: center; text-decoration: none; font-family: inherit; }
   .menu-list {
     position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 190px;
     background: var(--surface); border: 1px solid var(--rule); box-shadow: 0 6px 18px rgba(0,0,0,0.5);
@@ -230,13 +232,13 @@
         <div class="hint">You can also drop a saved .txt file onto the board.</div>
       </div>
     </div>
+    <a class="nav-link" href="game-studio.html">..STUDIO..</a>
     <div class="menu">
       <button type="button" class="menu-button" aria-haspopup="true" aria-expanded="false" aria-controls="about-menu">..ABOUT.. ▾</button>
       <div class="menu-list" id="about-menu" hidden>
         <button type="button" id="open-help">How to play</button>
         <button type="button" id="open-pieces">Pieces</button>
         <button type="button" id="open-about">Philosophy</button>
-        <a href="game-studio.html">Studio</a>
       </div>
     </div>
     <input type="file" id="load-file" accept=".txt,text/plain" hidden>
