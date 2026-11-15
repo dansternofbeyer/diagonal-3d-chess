@@ -162,6 +162,9 @@ Working and tested in Chrome, both over http and from `file://`:
   `python3 -m http.server 8766 --bind 127.0.0.1` from Bash and open
   `http://127.0.0.1:8766/`. Front the tab (`tabs_select`) or `requestAnimationFrame` stalls.
 - Add `?v=N` to the URL to dodge cached HTML.
+- Phone widths: headless Chrome never makes its window narrower than 500px, so a
+  `--window-size=390,…` screenshot is just the left 390px of a 500px page and looks
+  cut off. Test phones with a 375px-wide iframe in a served harness page instead.
 - To verify file:// really works, use headless Chrome:
   `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --use-angle=swiftshader --enable-unsafe-swiftshader --virtual-time-budget=6000 --screenshot=out.png file:///…/index.html`
 
