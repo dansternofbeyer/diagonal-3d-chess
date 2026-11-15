@@ -350,7 +350,7 @@ window.ChessScene = (function () {
         .replace("#include <common>", "#include <common>\nuniform vec3 rimColor;\nuniform float rimStrength;\n" + WOOD_SHADER_FUNCTIONS)
         .replace("#include <color_fragment>", [
           "#include <color_fragment>",
-          "diffuseColor.rgb = mix(diffuseColor.rgb, woodColor(vWoodPosition * 2.0), woodAmount);",
+          "diffuseColor.rgb = mix(diffuseColor.rgb, woodColor(vWoodPosition * 4.0), woodAmount);",
         ].join("\n"))
         .replace("#include <output_fragment>", [
           "float rimFacing = 1.0 - saturate(dot(normal, normalize(vViewPosition)));",

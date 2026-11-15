@@ -84,8 +84,8 @@ Working and tested in Chrome, both over http and from `file://`:
   `setPawnLength`). Any redraw calls `finishAnimations()` first.
 - **Wood finish** (`look.pieceFinish` = "wood" default | "lacquer"): procedural grain
   in the piece shader (`WOOD_SHADER_FUNCTIONS`, `addPieceShader` in chess-scene.js),
-  from object-space position x2 (models have no UVs, so photos can't be mapped;
-  the x2 in `woodColor(vWoodPosition * 2.0)` sets the grain size). Wood
+  from object-space position x4 (models have no UVs, so photos can't be mapped;
+  the x4 in `woodColor(vWoodPosition * 4.0)` sets the grain size). Wood
   colours `redWoodLight/Dark`, `blackWoodLight/Dark` are converted sRGB -> linear
   (unconverted they wash out). `addPieceShader` also holds the rim light; clone piece
   materials with `clonePieceMaterial` to keep both.
