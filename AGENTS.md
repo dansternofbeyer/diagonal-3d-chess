@@ -87,8 +87,8 @@ Working and tested in Chrome, both over http and from `file://`:
   copied into `build_pieces.py` and `build_ornate_pieces.py` (scripts are standalone).
 - **Wood finish** (`look.pieceFinish` = "wood" default | "lacquer"): procedural grain
   in the piece shader (`WOOD_SHADER_FUNCTIONS`, `addPieceShader` in chess-scene.js),
-  from object-space position x4 (models have no UVs, so photos can't be mapped;
-  the x4 in `woodColor(vWoodPosition * 4.0)` sets the grain size). Wood
+  from object-space position x16 (models have no UVs, so photos can't be mapped;
+  the x16 in `woodColor(vWoodPosition * 16.0)` sets the grain size). Wood
   colours `redWoodLight/Dark`, `blackWoodLight/Dark` are converted sRGB -> linear
   (unconverted they wash out). `addPieceShader` also holds the rim light; clone piece
   materials with `clonePieceMaterial` to keep both.
