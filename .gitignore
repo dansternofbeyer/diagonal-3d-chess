@@ -1,0 +1,10 @@
+# Mac folder settings
+.DS_Store
+
+# Blender's automatic backup copies
+*.blend1
+
+# Reference photos that belong to other people (kept locally, not published)
+docs/Molding.jpeg
+docs/Molding_02.jpeg
+docs/chess-set-old-english-classic-golden-rosewood-boxwood-both-pieces-1500x1170.jpg

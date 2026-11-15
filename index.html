@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<!--
+  index.html — Diagonal 3D Chess, playable in the browser.
+
+  A remake of Dan Sternof Beyer's 2006 Director 3D chess board: an 8x8x8 cube
+  tilted 45 degrees, with pawns that grow as they cross the board. Spin, pan and
+  zoom the board, click a piece to see its moves, click a highlighted cube to
+  move. Save and load games as .txt files.
+
+  Opens straight from the folder (double-click). Everything it needs is in this
+  folder: lib/ (three.js), models/ (pieces from Blender), js/ (rules and 3D code).
+
+  Open source under the MIT License (see LICENSE).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagonal 3D Chess</title>
+<style>
+  /* ===== Look and feel: the 2006 site, cleaned up and turned dark ===== */
+  :root {
+    color-scheme: dark;
+    --page: #141518;          /* matches the 3D background */
+    --surface: #1c1d21;       /* buttons, section headings */
+    --overlay: rgba(20,21,24,0.88);
+    --ink: #d9d9dc;
+    --muted: #8d8f96;
+    --rule: #34363c;
+    --link: #f0a243;          /* the old site's orange links, brightened for dark */
+    --banner: #f2b544;        /* the orange band on the old banner */
+    --banner-soft: rgba(242,181,68,0.16);
+    --red-side: #e5321f;
+    --black-side: #2a2a2e;
+    --panel-width: 310px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 12px/1.5 Verdana, Geneva, Tahoma, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button, select, input { font: inherit; color: inherit; }
+
+  /* ===== Header ===== */
+  .site-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 16px; border-bottom: 1px solid var(--rule);
+    flex-wrap: wrap;
+  }
+  .site-title { letter-spacing: 0.08em; font-size: 12px; white-space: nowrap; }
+  .site-title b { font-weight: normal; color: var(--ink); }
+  .site-nav { display: flex; gap: 4px; }
+
+  /* Drop-down menus in the header (GAME, ABOUT) */
+  .menu { position: relative; }
+  .menu-button {
+    border: 1px solid var(--rule); background: var(--surface); color: var(--link);
+    padding: 3px 12px; cursor: pointer; font-size: 11px; letter-spacing: 0.06em;
+  }
+  .menu-button:hover, .menu-button[aria-expanded="true"] { background: var(--banner-soft); }
+  .menu-list {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 190px;
+    background: var(--surface); border: 1px solid var(--rule); box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    display: grid; padding: 4px 0;
+  }
+  .menu-list[hidden] { display: none; }
+  .menu-list a, .menu-list button {
+    display: block; width: 100%; text-align: left; border: none; background: none;
+    color: var(--link); padding: 6px 14px; cursor: pointer; font-size: 12px;
+  }
+  .menu-list a:hover, .menu-list button:hover { background: var(--banner-soft); text-decoration: none; }
+  .menu-list .hint { padding: 4px 14px 6px; border-top: 1px solid var(--rule); margin-top: 4px; }
+
+  /* ===== Main layout: 3D view + side panel ===== */
+  .layout { flex: 1; display: flex; min-height: 0; }
+  .viewport { position: relative; flex: 1; min-width: 0; overflow: hidden; touch-action: none; }
+  .viewport canvas { display: block; }
+  .panel {
+    width: var(--panel-width); border-left: 1px solid var(--rule);
+    overflow-y: auto; overflow-x: hidden; padding: 10px 12px 16px;
+    transition: width 0.25s ease, padding 0.25s ease;
+  }
+  /* Keep the panel's contents at full width while it slides shut. */
+  .panel > * { width: calc(var(--panel-width) - 24px); }
+  .layout.panel-collapsed .panel { width: 0; padding-left: 0; padding-right: 0; border-left: none; }
+
+  @media (max-width: 760px) {
+    body { height: auto; min-height: 100%; }
+    .layout { flex-direction: column; }
+    .viewport { height: 62vh; flex: none; }
+    .panel { width: auto; border-left: none; border-top: 1px solid var(--rule); overflow: visible; transition: none; }
+    .panel > * { width: auto; }
+    .layout.panel-collapsed .panel { display: none; }
+    .layout.panel-collapsed .viewport { flex: 1; height: auto; min-height: 70vh; }
+  }
+
+  /* ===== Panel sections ===== */
+  /* Each box is a <details> that folds open and shut by clicking its heading. */
+  .section { border: 1px solid var(--rule); margin-bottom: 10px; }
+  .section > summary {
+    padding: 4px 8px; font-size: 11px; letter-spacing: 0.08em; text-align: center;
+    background: var(--surface); cursor: pointer; list-style: none; position: relative; user-select: none;
+  }
+  .section > summary::-webkit-details-marker { display: none; }
+  .section > summary::before {
+    content: "▸"; position: absolute; left: 9px; color: var(--muted); transition: transform 0.15s;
+  }
+  .section[open] > summary { border-bottom: 1px solid var(--rule); }
+  .section[open] > summary::before { transform: rotate(90deg); }
+  .section > summary:hover { color: var(--link); }
+  .section .body { padding: 8px; display: grid; gap: 6px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .button {
+    border: 1px solid var(--rule); background: var(--surface); padding: 4px 8px; cursor: pointer;
+    color: var(--link); flex: 1; min-width: 0; text-align: center;
+  }
+  .button:hover { background: var(--banner-soft); }
+  .button:disabled { color: #5b5d63; cursor: default; background: var(--surface); }
+  .button.is-on { background: var(--banner); color: #000; border-color: #d49a2c; }
+  .choice-group { display: flex; border: 1px solid var(--rule); }
+  .choice-group .button { border: none; border-right: 1px solid var(--rule); }
+  .choice-group .button:last-child { border-right: none; }
+  label.check { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .hint { color: var(--muted); font-size: 11px; }
+  .plane-control { display: grid; grid-template-columns: auto 1fr auto auto; gap: 6px; align-items: center; }
+  .plane-control input[type=range] { width: 100%; }
+  .plane-control .number { min-width: 2.4em; text-align: right; }
+
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border: 1px solid #555; }
+
+  .captured-list { min-height: 20px; font-size: 18px; line-height: 1.1; letter-spacing: 1px; }
+  .captured-list.red { color: var(--red-side); }
+  /* Black symbols get a light outline so they show on the dark page. */
+  .captured-list.black { color: var(--black-side); -webkit-text-stroke: 1px #9a9ca3; }
+  .move-log {
+    max-height: 140px; overflow-y: auto; margin: 0; padding-left: 22px;
+    font-size: 11px; color: var(--muted);
+  }
+  .footer { text-align: center; color: var(--muted); font-size: 11px; margin-top: 12px; }
+
+  /* ===== Overlays on the 3D view ===== */
+  .status {
+    position: absolute; top: 10px; left: 10px; background: var(--overlay);
+    border: 1px solid var(--rule); padding: 5px 10px; pointer-events: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .turn-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid #77797f; }
+  .status .warning { color: #ff5a4a; font-weight: bold; }
+  .cell-readout {
+    position: absolute; left: 10px; bottom: 10px; background: var(--overlay);
+    border: 1px solid var(--rule); padding: 3px 8px; color: var(--muted); pointer-events: none;
+  }
+  .cell-readout:empty { display: none; }
+  .panel-toggle {
+    background: var(--overlay);
+    border: 1px solid var(--rule); color: var(--link); padding: 4px 10px; cursor: pointer;
+    font-size: 11px; letter-spacing: 0.04em;
+  }
+  .panel-toggle:hover { background: #2a2b30; }
+  .view-buttons { position: absolute; top: 10px; right: 10px; display: grid; gap: 4px; justify-items: end; }
+  .view-buttons .panel-toggle { position: static; }
+  .loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); letter-spacing: 0.1em; background: var(--page);
+  }
+  .toast {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--banner); padding: 6px 12px;
+    max-width: 90%; box-shadow: 0 2px 10px rgba(0,0,0,0.5); display: none;
+  }
+  .toast.is-visible { display: block; }
+  .drop-hint {
+    position: absolute; inset: 0; background: rgba(242,181,68,0.25); border: 3px dashed var(--banner);
+    display: none; align-items: center; justify-content: center; font-size: 16px; pointer-events: none;
+  }
+  .drop-hint.is-visible { display: flex; }
+
+  /* ===== Dialogs ===== */
+  dialog {
+    border: 1px solid var(--rule); padding: 0; max-width: min(640px, calc(100vw - 32px));
+    color: var(--ink); background: var(--page);
+  }
+  dialog::backdrop { background: rgba(0,0,0,0.55); }
+  dialog header {
+    padding: 6px 12px; border-bottom: 1px solid var(--rule); letter-spacing: 0.08em;
+    display: flex; justify-content: space-between; align-items: center; background: var(--surface);
+  }
+  dialog .dialog-body { padding: 12px 16px; max-height: 70vh; overflow-y: auto; }
+  dialog h3 { font-size: 12px; font-weight: normal; letter-spacing: 0.08em; margin: 14px 0 4px; color: var(--link); }
+  dialog p, dialog li { margin: 4px 0; }
+  .banner {
+    background: linear-gradient(90deg, #fbe3b4, var(--banner)); color: #111;
+    padding: 10px 14px; text-align: right; font-size: 20px; letter-spacing: 0.04em;
+  }
+  .banner small { display: block; font-size: 10px; letter-spacing: 0.15em; }
+  .promotion-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .promotion-choices .button { font-size: 22px; padding: 8px 0; }
+</style>
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<header class="site-header">
+  <div class="site-title">..<b>DIAGONAL 3D CHESS</b>..</div>
+  <nav class="site-nav">
+    <div class="menu">
+      <button type="button" class="menu-button" aria-haspopup="true" aria-expanded="false" aria-controls="game-menu">..GAME.. ▾</button>
+      <div class="menu-list" id="game-menu" hidden>
+        <button type="button" id="new-game">New game</button>
+        <button type="button" id="save-game">Save game (.txt)</button>
+        <button type="button" id="load-game">Load game…</button>
+        <div class="hint">You can also drop a saved .txt file onto the board.</div>
+      </div>
+    </div>
+    <div class="menu">
+      <button type="button" class="menu-button" aria-haspopup="true" aria-expanded="false" aria-controls="about-menu">..ABOUT.. ▾</button>
+      <div class="menu-list" id="about-menu" hidden>
+        <button type="button" id="open-help">How to play</button>
+        <button type="button" id="open-pieces">Pieces</button>
+        <button type="button" id="open-about">Philosophy</button>
+        <a href="game-studio.html">Studio</a>
+      </div>
+    </div>
+    <input type="file" id="load-file" accept=".txt,text/plain" hidden>
+  </nav>
+</header>
+
+<div class="layout">
+  <!-- ===== 3D view ===== -->
+  <main class="viewport" id="viewport" aria-label="3D chess board. Drag to spin, right- or middle-drag to pan, scroll to zoom.">
+    <div class="status" id="status"><span class="turn-dot" id="turn-dot"></span><span id="status-text">Loading…</span></div>
+    <div class="view-buttons">
+      <button type="button" class="panel-toggle" id="panel-toggle" aria-controls="side-panel" aria-expanded="true">Hide options ›</button>
+      <button type="button" class="panel-toggle" id="reset-view" title="Back to the starting view">Reset view</button>
+    </div>
+    <div class="cell-readout" id="cell-readout"></div>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="drop-hint" id="drop-hint">Drop a saved .txt game to load it</div>
+    <div class="loading" id="loading">..LOADING THE BOARD..</div>
+  </main>
+
+  <!-- ===== Side panel ===== -->
+  <aside class="panel" id="side-panel">
+    <details class="section" data-section="moves">
+      <summary>..MOVES..</summary>
+      <div class="body">
+        <div class="choice-group" role="group" aria-label="Move rules">
+          <button type="button" class="button" data-mode="classic">Classic moves</button>
+          <button type="button" class="button" data-mode="free">Free moves</button>
+        </div>
+        <label class="check"><input type="checkbox" id="enforce-turns" checked> Take turns (Red, then Black)</label>
+        <button type="button" class="button" id="undo" title="Undo (Ctrl+Z)">Undo last move</button>
+        <div id="plane-area" hidden>
+          <div class="plane-control">
+            <span>Plane</span>
+            <input type="range" id="plane-slider" min="0" max="14" step="1" value="7" aria-label="Plane to show">
+            <button type="button" class="button" id="plane-down" aria-label="Previous plane">‹</button>
+            <button type="button" class="button" id="plane-up" aria-label="Next plane">›</button>
+          </div>
+          <div class="hint">Showing plane <span id="plane-number">7</span> of 0–14. Plane 0 is Red's edge, 14 is Black's. Use [ and ] keys too.</div>
+        </div>
+        <div class="hint" id="mode-hint"></div>
+      </div>
+    </details>
+
+    <details class="section" data-section="show">
+      <summary>..SHOW MOVES AS..</summary>
+      <div class="body">
+        <div class="choice-group" role="group" aria-label="Move highlight style">
+          <button type="button" class="button" data-style="blue">Glass cubes</button>
+          <button type="button" class="button" data-style="dots">Glowing dots</button>
+        </div>
+        <label class="check"><input type="checkbox" id="show-lines"> Move lines (a thin line along each move's path)</label>
+        <label class="check"><input type="checkbox" id="show-grid"> Show a dot in every cell</label>
+        <label class="check"><input type="checkbox" id="auto-spin"> Slowly spin the board</label>
+      </div>
+    </details>
+
+    <details class="section" data-section="selected">
+      <summary>..SELECTED..</summary>
+      <div class="body">
+        <div id="selected-info" class="hint">Click a piece to select it.</div>
+        <div class="row">
+          <button type="button" class="button" id="deselect" disabled>Deselect</button>
+          <button type="button" class="button" id="remove-piece" disabled title="Take this piece off the board">Take off board</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="section" data-section="available">
+      <summary>..AVAILABLE MOVES..</summary>
+      <div class="body">
+        <div class="row">
+          <button type="button" class="button" id="select-pieces" aria-pressed="false">Select pieces</button>
+          <button type="button" class="button" id="clear-available">Clear moves</button>
+        </div>
+        <div class="legend"><span><i id="legend-red"></i>Red</span><span><i id="legend-black"></i>Black</span><span><i id="legend-shared"></i>Both sides</span></div>
+        <div class="hint">Turn on <b>Select pieces</b>, then click as many pieces as you like (either side) to see all their moves at once. Click a piece again to drop it. Nothing moves while this is on.</div>
+      </div>
+    </details>
+
+    <details class="section" data-section="taken">
+      <summary>..TAKEN..</summary>
+      <div class="body">
+        <div class="captured-list red" id="captured-red" aria-label="Red pieces taken"></div>
+        <div class="captured-list black" id="captured-black" aria-label="Black pieces taken"></div>
+        <details>
+          <summary class="hint">Move list</summary>
+          <ol class="move-log" id="move-log"></ol>
+        </details>
+      </div>
+    </details>
+
+    <div class="footer">
+      Design: Dan Sternof Beyer · 2006 / 2026<br>
+      Open source under the <a href="LICENSE">MIT License</a>.
+    </div>
+  </aside>
+</div>
+
+<!-- ===== Dialogs ===== -->
+<dialog id="help-dialog">
+  <header>..HOW TO PLAY.. <button type="button" class="button" data-close style="flex:none">Close</button></header>
+  <div class="dialog-body">
+    <h3>MOVING AROUND</h3>
+    <ul>
+      <li><b>Spin:</b> drag with the left mouse button (one finger on a phone).</li>
+      <li><b>Pan:</b> drag with the middle mouse button (hold the wheel down) or the right button, or shift-drag (two fingers on a phone).</li>
+      <li><b>Zoom:</b> scroll wheel or pinch.</li>
+      <li><b>Options:</b> “Hide options”, top right, gives the board the whole window. “Reset view” goes back to the starting view. Click a box's heading to open or close it.</li>
+    </ul>
+    <h3>MOVING PIECES</h3>
+    <ul>
+      <li>Click a piece. Cubes (or dots) show where it can go. Orange ones are captures.</li>
+      <li>Click a highlighted cube to move there. Click empty space or press Esc to clear.</li>
+      <li><b>Undo last move</b> (in the Moves box, or Ctrl+Z) takes back the last move.</li>
+    </ul>
+    <h3>CLASSIC OR FREE</h3>
+    <p><b>Classic moves</b> shows each piece's normal moves. <b>Free moves</b> lets any piece go anywhere: pick a plane with the slider and every cube in it lights up. This is the "incorrect move" from the original: the board does not decide the rules, the players do.</p>
+    <p>A piece can always be <b>taken off the board</b> by hand from the Selected box.</p>
+    <h3>THE BOARD</h3>
+    <p>The board is an 8×8×8 cube, tilted 45° so one edge points at each player. Red starts on the front edge, Black on the back edge. Each upright slice of the cube is a <b>plane</b>, numbered 0 (Red's edge) to 14 (Black's edge).</p>
+    <h3>TAKEN PIECES</h3>
+    <p>Taken pieces pop up on the rose rail, beside the player who took them.</p>
+    <h3>SAVE AND LOAD</h3>
+    <p>Under the <b>GAME</b> menu, <b>Save game</b> downloads a .txt file listing every piece. It is plain text, so you can edit it to set up puzzles and send it to a friend. <b>Load game</b> (or drop the file on the board) sets the pieces up again.</p>
+    <p>The game in progress is also kept in this browser, so visiting the Studio or reloading the page picks up where you left off. <b>New game</b> starts over.</p>
+    <h3>AVAILABLE MOVES</h3>
+    <p>Turn on <b>Select pieces</b> and click several pieces, from either side, to see all their moves at once: red for Red, white for Black, purple where both sides can reach. Good for seeing who guards what.</p>
+    <h3>MOVE LINES</h3>
+    <p>Tick <b>Move lines</b> to draw a thin line along each move's path, through every cube it passes.</p>
+  </div>
+</dialog>
+
+<dialog id="pieces-dialog">
+  <header>..PIECES AND MOVES.. <button type="button" class="button" data-close style="flex:none">Close</button></header>
+  <div class="dialog-body" id="pieces-dialog-body"></div>
+</dialog>
+
+<dialog id="about-dialog">
+  <header>..PHILOSOPHY.. <button type="button" class="button" data-close style="flex:none">Close</button></header>
+  <div class="banner">3D CHESS<small>DESIGN : DAN BEYER</small></div>
+  <div class="dialog-body">
+    <p>Games evolve. It is in their nature to change. As physical games become digitized, their ability to evolve is constricted by the hard coding of the "correct move".</p>
+    <p>This is why Diagonal 3D Chess can make "incorrect" moves. It is less a 3D chess game than a 3D chess <i>board</i>: a tool for many variations of 3D chess.</p>
+    <h3>OPEN QUESTIONS FOR PLAYERS</h3>
+    <ul>
+      <li>A pawn crossing one plane at a time takes about 8 moves to reach the middle and 14 to reach the far edge. When should it promote?</li>
+      <li>A pawn fills a whole row, so it can be taken at several spots, and can take several pieces at once. Is that OK?</li>
+    </ul>
+    <p>This version uses one answer to each (promote at the far edge; yes, take them all), but Free moves and hand-edited save files let you play by your own.</p>
+    <h3>HISTORY</h3>
+    <p>Made in 2006 as a senior thesis: Maya models in Director 3D, programmed in Lingo. Rebuilt in 2026 for the browser with three.js, and models made in Blender. Original site: <a href="https://thehinge.net/3dchess/" target="_blank" rel="noopener">thehinge.net/3dchess</a>.</p>
+  </div>
+</dialog>
+
+<dialog id="promotion-dialog">
+  <header>..PROMOTE YOUR PAWN..</header>
+  <div class="dialog-body">
+    <p>Your pawn reached the far edge. Choose what it becomes:</p>
+    <div class="promotion-choices">
+      <button type="button" class="button" data-promote="queen" title="Queen">♕<br><small>Queen</small></button>
+      <button type="button" class="button" data-promote="rook" title="Rook">♖<br><small>Rook</small></button>
+      <button type="button" class="button" data-promote="bishop" title="Bishop">♗<br><small>Bishop</small></button>
+      <button type="button" class="button" data-promote="knight" title="Knight">♘<br><small>Knight</small></button>
+    </div>
+    <p class="hint">Or keep it a pawn: <button type="button" class="button" data-promote="pawn" style="flex:none; display:inline">Stay a pawn</button></p>
+  </div>
+</dialog>
+
+<!-- ===== Libraries and shared code (all local, so it works offline) ===== -->
+<script src="lib/three.min.js"></script>
+<script src="lib/OrbitControls.js"></script>
+<script src="lib/GLTFLoader.js"></script>
+<script src="models/pieces.js"></script>
+<script src="js/look-settings.js"></script>
+<script src="js/chess-rules.js"></script>
+<script src="js/chess-scene.js"></script>
+
+<script>
+/* ==========================================================================
+   The game: wires the rules (ChessRules) to the 3D view (ChessScene) and the
+   buttons in the side panel.
+   ========================================================================== */
+(function () {
+  "use strict";
+
+  const Rules = window.ChessRules;
+  const Scene3D = window.ChessScene;
+
+  const PIECE_SYMBOLS = { king: "♚", queen: "♛", rook: "♜", bishop: "♝", knight: "♞", pawn: "♟" };
+  const PREFERENCES_KEY = "diagonal-3d-chess.preferences";
+
+  // ===== State =====
+
+  const state = {
+    game: Rules.createNewGame(),
+    undoStack: [],              // copies of earlier games, newest last
+    selectedPieceId: null,
+    moveMode: "classic",        // "classic" or "free"
+    enforceTurns: true,
+    highlightStyle: "blue",     // "blue" (glass cubes) or "dots"
+    showLines: false,           // thin lines along each move's path
+    freePlane: 7,
+    showingAvailableMoves: false, // the Available Moves "Select pieces" tool is on
+    availablePieceIds: [],      // pieces whose moves it shows
+    currentMoves: [],
+    pendingPromotionId: null,
+  };
+
+  // 3D things
+  const look = Scene3D.loadLook();
+  const viewport = document.getElementById("viewport");
+  const viewer = Scene3D.createViewer(viewport, look);
+  const board = Scene3D.buildBoard(look);
+  viewer.scene.add(board);
+  const materials = Scene3D.createPieceMaterials(look);
+  let models = null;
+
+  const piecesLayer = new THREE.Group();
+  const highlightLayer = new THREE.Group();
+  const railLayer = new THREE.Group();        // taken pieces standing on the rose rail
+  const effectsLayer = new THREE.Group();     // short-lived things, like a piece being taken
+  viewer.scene.add(piecesLayer, highlightLayer, railLayer, effectsLayer);
+
+  let highlights = null;        // result of Scene3D.buildMoveHighlights
+  const glowLights = Scene3D.createGlowLights(viewer.scene);
+  const SELECTED_GLOW_COLOR = "#ffb22e";
+  let selectionBoxes = [];      // gold outlines around the selected piece(s)
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+
+  // ===== Small helpers =====
+
+  const byId = (id) => document.getElementById(id);
+
+  function findPiece(pieceId) {
+    return state.game.pieces.find((piece) => piece.id === pieceId) || null;
+  }
+
+  function capitalize(word) {
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }
+
+  let toastTimer = null;
+  function showToast(message, seconds) {
+    const toast = byId("toast");
+    toast.textContent = message;
+    toast.classList.add("is-visible");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("is-visible"), (seconds || 3) * 1000);
+  }
+
+  function disposeGroupContents(group) {
+    while (group.children.length > 0) group.remove(group.children[0]);
+  }
+
+  // ===== Keeping the game between visits =====
+  // The game in progress (and its undo history) is saved in this browser after
+  // every change, so going to the Studio and back, or reloading, picks up where
+  // you left off. "New game" is the way to start over.
+
+  const CURRENT_GAME_KEY = "diagonal-3d-chess.current-game";
+  const SAVED_UNDO_STEPS = 100;   // keep the stored copy small
+
+  function saveCurrentGame() {
+    try {
+      localStorage.setItem(CURRENT_GAME_KEY, JSON.stringify({
+        game: state.game,
+        undoStack: state.undoStack.slice(-SAVED_UNDO_STEPS),
+      }));
+    } catch (error) { /* storage blocked or full: the game just won't be remembered */ }
+  }
+
+  function restoreCurrentGame() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CURRENT_GAME_KEY) || "null");
+      if (!saved || !saved.game || !Array.isArray(saved.game.pieces)) return;
+      state.game = Object.assign({ markers: [], captured: [], moveLog: [], turn: "red" }, saved.game);
+      state.undoStack = Array.isArray(saved.undoStack) ? saved.undoStack : [];
+    } catch (error) { /* nothing usable saved: start a new game */ }
+  }
+
+  // ===== Preferences (remembered in this browser) =====
+
+  function loadPreferences() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}");
+      if (["blue", "dots"].includes(saved.highlightStyle)) state.highlightStyle = saved.highlightStyle;
+      if (typeof saved.showLines === "boolean") state.showLines = saved.showLines;
+      if (typeof saved.enforceTurns === "boolean") state.enforceTurns = saved.enforceTurns;
+      if (typeof saved.showGrid === "boolean") byId("show-grid").checked = saved.showGrid;
+      if (saved.panelCollapsed === true) setPanelCollapsed(true);
+      // Which option boxes were open (all start closed).
+      const openSections = Array.isArray(saved.openSections) ? saved.openSections : [];
+      document.querySelectorAll("details.section").forEach((box) => {
+        box.open = openSections.includes(box.dataset.section);
+      });
+    } catch (error) { /* storage blocked: use defaults */ }
+  }
+
+  function savePreferences() {
+    try {
+      localStorage.setItem(PREFERENCES_KEY, JSON.stringify({
+        highlightStyle: state.highlightStyle,
+        showLines: state.showLines,
+        enforceTurns: state.enforceTurns,
+        showGrid: byId("show-grid").checked,
+        panelCollapsed: isPanelCollapsed(),
+        openSections: [...document.querySelectorAll("details.section[open]")].map((box) => box.dataset.section),
+      }));
+    } catch (error) { /* storage blocked: nothing to remember */ }
+  }
+
+  // ===== Drawing the pieces =====
+
+  function renderPieces() {
+    finishAnimations();
+    disposeGroupContents(piecesLayer);
+    if (!models) return;
+    for (const piece of state.game.pieces) {
+      piecesLayer.add(Scene3D.buildPieceObject(piece, models, materials, look));
+    }
+    renderRail();
+    renderSelectionBox();
+  }
+
+  /** Every taken piece, standing on the rail beside the player who took it. */
+  function renderRail() {
+    disposeGroupContents(railLayer);
+    for (const side of Rules.SIDES) {
+      state.game.captured
+        .filter((taken) => taken.side === side)
+        .forEach((taken, index) => {
+          const railPiece = Scene3D.buildRailPiece(taken, index, models, materials, look);
+          railPiece.userData.takenSide = side;
+          railLayer.add(railPiece);
+        });
+    }
+  }
+
+  /** The pieces drawn as selected: the one being moved, or every piece in Available Moves. */
+  function highlightedPieceIds() {
+    if (state.showingAvailableMoves) return state.availablePieceIds;
+    return state.selectedPieceId ? [state.selectedPieceId] : [];
+  }
+
+  function renderSelectionBox() {
+    for (const box of selectionBoxes) viewer.scene.remove(box);
+    selectionBoxes = [];
+    for (const pieceId of highlightedPieceIds()) {
+      const pieceObject = piecesLayer.children.find((child) => child.userData.pieceId === pieceId);
+      if (!pieceObject) continue;
+      // Give the selected piece its own glowing copy of its materials.
+      pieceObject.traverse((child) => {
+        if (child.isMesh) {
+          child.material = Scene3D.clonePieceMaterial(child.material);
+          child.material.emissive = new THREE.Color("#ff9d00");
+          child.material.emissiveIntensity = 0.45;
+        }
+      });
+      const bounds = new THREE.Box3().setFromObject(pieceObject).expandByScalar(0.06);
+      const box = new THREE.Box3Helper(bounds, new THREE.Color("#e89a12"));
+      viewer.scene.add(box);
+      selectionBoxes.push(box);
+    }
+  }
+
+  // ===== Moves and highlights =====
+
+  function computeMoves() {
+    const piece = findPiece(state.selectedPieceId);
+    if (!piece) return [];
+    if (state.moveMode === "free") return Rules.getFreeMoves(piece, state.game.pieces, state.freePlane);
+    return Rules.getClassicMoves(piece, state.game.pieces);
+  }
+
+  /** Each piece chosen in Available Moves, with its classic moves. */
+  function availableMoveEntries() {
+    return state.availablePieceIds
+      .map(findPiece)
+      .filter(Boolean)
+      .map((piece) => ({ piece, moves: Rules.getClassicMoves(piece, state.game.pieces) }));
+  }
+
+  function refreshHighlights() {
+    disposeGroupContents(highlightLayer);
+    if (state.showingAvailableMoves) {
+      state.currentMoves = [];
+      highlights = Scene3D.buildAvailableMoves(availableMoveEntries(), state.highlightStyle, look, state.showLines);
+    } else {
+      state.currentMoves = computeMoves();
+      highlights = Scene3D.buildMoveHighlights(state.currentMoves, state.highlightStyle, look,
+        findPiece(state.selectedPieceId), state.showLines);
+    }
+    highlightLayer.add(highlights.group);
+    updateGlowLights();
+  }
+
+  /** Light from the selected piece(s) and the move markers onto everything nearby. */
+  function updateGlowLights() {
+    const sources = highlightedPieceIds()
+      .map(findPiece)
+      .filter(Boolean)
+      .slice(0, 3)
+      .map((piece) => ({ position: Scene3D.pieceWorldPosition(piece), color: SELECTED_GLOW_COLOR, strength: 6 }));
+    const markerLights = Scene3D.clusterGlowPoints(highlights.glowPoints, glowLights.count - sources.length, 3.5);
+    glowLights.setGlowSources(sources.concat(markerLights));
+  }
+
+  /** Redraw everything that depends on the game and the selection. */
+  function refreshAll() {
+    saveCurrentGame();
+    renderPieces();
+    refreshHighlights();
+    updatePanel();
+  }
+
+  // ===== Selecting =====
+
+  function canSelect(piece) {
+    if (!state.enforceTurns || state.moveMode === "free") return true;
+    return piece.side === state.game.turn;
+  }
+
+  function selectPiece(pieceId) {
+    const piece = findPiece(pieceId);
+    if (!piece) return;
+    if (!canSelect(piece)) {
+      showToast("It is " + capitalize(state.game.turn) + "'s turn. (Untick “Take turns” to move either side.)");
+      return;
+    }
+    state.selectedPieceId = pieceId;
+    state.freePlane = Rules.planeOfPiece(piece);
+    refreshAll();
+  }
+
+  function clearSelection() {
+    state.selectedPieceId = null;
+    refreshAll();
+  }
+
+  // ===== Animating moves =====
+  // A move is applied to the game straight away and the board redrawn in its
+  // new state; the animation then plays the moving piece from where it was to
+  // where it is now. Redrawing again (another click, Undo) just finishes it.
+
+  const animations = [];   // { update(seconds) -> true when done, finish() }
+
+  function finishAnimations() {
+    while (animations.length > 0) animations.shift().finish();
+  }
+
+  function stepAnimations(deltaSeconds) {
+    for (let index = animations.length - 1; index >= 0; index--) {
+      if (animations[index].update(deltaSeconds)) {
+        const done = animations.splice(index, 1)[0];
+        done.finish();
+      }
+    }
+  }
+
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  /** Quick overshoot, for things popping into place. */
+  function easeOutBack(t) {
+    const overshoot = 1.9;
+    return 1 + (overshoot + 1) * Math.pow(t - 1, 3) + overshoot * Math.pow(t - 1, 2);
+  }
+
+  function findPieceObject(pieceId) {
+    return piecesLayer.children.find((child) => child.userData.pieceId === pieceId) || null;
+  }
+
+  /**
+   * Play a move: the piece travels its path (an L for knights), pawns grow or
+   * shrink as they change rows, taken pieces shrink away as the mover arrives,
+   * then pop up on the rail. `onDone` runs when it is over (or cut short).
+   */
+  function animateMove(pieceBefore, pieceAfter, takenBefore, railCountsBefore, onDone) {
+    const holder = findPieceObject(pieceAfter.id);
+    if (!holder) { if (onDone) onDone(); return; }
+
+    const path = Scene3D.movePath(pieceBefore, pieceAfter);
+    // Longer moves take a little longer, but never drag on.
+    const duration = Math.min(1.1, 0.3 + Scene3D.pathLength(path) / 9);
+    const isPawn = pieceBefore.type === "pawn" && pieceAfter.type === "pawn";
+    const pawnShape = isPawn ? holder.children[0] : null;
+    const startCount = isPawn ? Scene3D.pawnCellCount(pieceBefore.plane) : 1;
+    const endCount = isPawn ? Scene3D.pawnCellCount(pieceAfter.plane) : 1;
+
+    // The pieces being taken stay where they were until the mover reaches them.
+    const victims = takenBefore.map((taken) => {
+      const object = Scene3D.buildPieceObject(taken, models, materials, look);
+      effectsLayer.add(object);
+      return object;
+    });
+    // The new pieces on the rail start hidden and pop up at the end.
+    const newRailPieces = railLayer.children.filter((railPiece) =>
+      railPiece.userData.railIndex >= railCountsBefore[railPiece.userData.takenSide]);
+    newRailPieces.forEach((railPiece) => railPiece.scale.setScalar(0.001));
+
+    let elapsed = 0;
+    const popDuration = 0.45;
+
+    function placeMover(fraction) {
+      const eased = easeInOutCubic(fraction);
+      holder.position.copy(Scene3D.pointAlongPath(path, eased));
+      if (pawnShape) Scene3D.setPawnLength(pawnShape, startCount + (endCount - startCount) * eased);
+    }
+
+    placeMover(0);
+    animations.push({
+      update(deltaSeconds) {
+        elapsed += deltaSeconds;
+        const fraction = Math.min(1, elapsed / duration);
+        placeMover(fraction);
+        // Taken pieces shrink away over the last part of the move.
+        const shrink = Math.max(0, Math.min(1, (fraction - 0.7) / 0.3));
+        victims.forEach((victim) => victim.scale.setScalar(Math.max(0.001, 1 - shrink)));
+        // Then they pop up on the rail.
+        const pop = Math.max(0, Math.min(1, (elapsed - duration) / popDuration));
+        newRailPieces.forEach((railPiece) => railPiece.scale.setScalar(Math.max(0.001, easeOutBack(pop))));
+        return elapsed >= duration + (newRailPieces.length > 0 ? popDuration : 0);
+      },
+      finish() {
+        placeMover(1);
+        victims.forEach((victim) => effectsLayer.remove(victim));
+        newRailPieces.forEach((railPiece) => railPiece.scale.setScalar(1));
+        if (onDone) onDone();
+      },
+    });
+  }
+
+  /** Taken pieces per side before a move, so the new ones on the rail can pop. */
+  function countTakenBySide() {
+    const counts = { red: 0, black: 0 };
+    for (const taken of state.game.captured) counts[taken.side]++;
+    return counts;
+  }
+
+  // ===== Making moves =====
+
+  function pushUndo() {
+    state.undoStack.push(Rules.copyGame(state.game));
+    if (state.undoStack.length > 300) state.undoStack.shift();
+  }
+
+  function performMove(move) {
+    pushUndo();
+    const moverBefore = JSON.parse(JSON.stringify(findPiece(move.pieceId)));
+    const takenBefore = state.game.pieces
+      .filter((piece) => move.captureIds.includes(piece.id))
+      .map((piece) => JSON.parse(JSON.stringify(piece)));
+    const railCountsBefore = countTakenBySide();
+
+    const result = Rules.applyMove(state.game, move);
+    state.selectedPieceId = null;
+    refreshAll();
+    if (!result) return;
+
+    if (result && result.kingTaken) {
+      showToast(capitalize(result.kingTaken.side) + "'s king has been taken! " +
+        capitalize(Rules.otherSide(result.kingTaken.side)) + " wins. (Keep playing if you like.)", 6);
+    } else if (result && result.capturedPieces.length > 0) {
+      showToast(capitalize(result.piece.side) + " takes " +
+        result.capturedPieces.map((piece) => piece.side + " " + piece.type).join(", ") + ".");
+    }
+    // Ask about promotion once the pawn has finished arriving.
+    const askAboutPromotion = () => {
+      if (!result.needsPromotion || byId("promotion-dialog").open) return;
+      if (!findPiece(result.piece.id)) return;
+      state.pendingPromotionId = result.piece.id;
+      byId("promotion-dialog").showModal();
+    };
+    animateMove(moverBefore, result.piece, takenBefore, railCountsBefore, askAboutPromotion);
+  }
+
+  function choosePromotion(newType) {
+    if (state.pendingPromotionId && newType !== "pawn") {
+      Rules.promotePawn(state.game, state.pendingPromotionId, newType);
+    }
+    state.pendingPromotionId = null;
+    byId("promotion-dialog").close();
+    refreshAll();
+  }
+
+  function undo() {
+    if (state.undoStack.length === 0) return;
+    state.game = state.undoStack.pop();
+    state.selectedPieceId = null;
+    refreshAll();
+  }
+
+  function newGame() {
+    if (state.game.moveLog.length > 0 && !confirm("Start a new game? (You can still Undo afterwards.)")) return;
+    pushUndo();
+    state.game = Rules.createNewGame();
+    state.selectedPieceId = null;
+    refreshAll();
+  }
+
+  function removeSelectedPiece() {
+    if (!state.selectedPieceId) return;
+    pushUndo();
+    const railCountsBefore = countTakenBySide();
+    Rules.removePiece(state.game, state.selectedPieceId);
+    state.selectedPieceId = null;
+    refreshAll();
+    popNewRailPieces(railCountsBefore);
+  }
+
+  /** Pop up rail pieces added since `railCountsBefore` (for pieces taken off by hand). */
+  function popNewRailPieces(railCountsBefore) {
+    const newRailPieces = railLayer.children.filter((railPiece) =>
+      railPiece.userData.railIndex >= railCountsBefore[railPiece.userData.takenSide]);
+    let elapsed = 0;
+    animations.push({
+      update(deltaSeconds) {
+        elapsed += deltaSeconds;
+        const pop = Math.min(1, elapsed / 0.45);
+        newRailPieces.forEach((railPiece) => railPiece.scale.setScalar(Math.max(0.001, easeOutBack(pop))));
+        return pop >= 1;
+      },
+      finish() { newRailPieces.forEach((railPiece) => railPiece.scale.setScalar(1)); },
+    });
+  }
+
+  // ===== Side panel: open or collapsed =====
+
+  function isPanelCollapsed() {
+    return document.querySelector(".layout").classList.contains("panel-collapsed");
+  }
+
+  function setPanelCollapsed(collapsed) {
+    document.querySelector(".layout").classList.toggle("panel-collapsed", collapsed);
+    const toggle = byId("panel-toggle");
+    toggle.textContent = collapsed ? "‹ Show options" : "Hide options ›";
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+  }
+
+  // ===== Available Moves: several pieces' moves at once =====
+
+  function setShowingAvailableMoves(turnOn) {
+    state.showingAvailableMoves = turnOn;
+    state.availablePieceIds = [];
+    state.selectedPieceId = null;
+    refreshAll();
+  }
+
+  /** Add a piece to the Available Moves set, or drop it if it is already there. */
+  function toggleAvailablePiece(pieceId) {
+    const ids = state.availablePieceIds;
+    state.availablePieceIds = ids.includes(pieceId) ? ids.filter((id) => id !== pieceId) : ids.concat(pieceId);
+    refreshAll();
+  }
+
+  function clearAvailableMoves() {
+    state.availablePieceIds = [];
+    refreshAll();
+  }
+
+  // ===== Clicking and hovering in 3D =====
+
+  function setPointerFromEvent(event) {
+    const bounds = viewer.renderer.domElement.getBoundingClientRect();
+    pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+    pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, viewer.camera);
+  }
+
+  /** Walk up from a hit mesh to the piece holder that carries the piece id. */
+  function pieceIdOfObject(object) {
+    while (object) {
+      if (object.userData.pieceId) return object.userData.pieceId;
+      object = object.parent;
+    }
+    return null;
+  }
+
+  /**
+   * What is under the pointer? Returns the nearest of:
+   *   { kind: "move", move }   a highlighted cube
+   *   { kind: "piece", pieceId }
+   */
+  function pickUnderPointer() {
+    const targets = [];
+    if (highlights) targets.push(...highlights.hitMeshes);
+    targets.push(piecesLayer);
+    const hits = raycaster.intersectObjects(targets, true);
+    for (const hit of hits) {
+      if (hit.object.userData.move) return { kind: "move", move: hit.object.userData.move };
+      const pieceId = pieceIdOfObject(hit.object);
+      if (pieceId) return { kind: "piece", pieceId };
+    }
+    return null;
+  }
+
+  function handleClick(event) {
+    setPointerFromEvent(event);
+    const picked = pickUnderPointer();
+
+    // Available Moves: clicks only add or drop pieces; nothing moves.
+    if (state.showingAvailableMoves) {
+      if (picked && picked.kind === "piece") toggleAvailablePiece(picked.pieceId);
+      return;
+    }
+
+    if (!picked) {
+      if (state.selectedPieceId) clearSelection();
+      return;
+    }
+    if (picked.kind === "move") {
+      performMove(picked.move);
+      return;
+    }
+    // Clicking an enemy that the selected piece can take counts as that capture.
+    const capture = state.currentMoves.find((move) => move.captureIds.includes(picked.pieceId));
+    if (capture) {
+      performMove(capture);
+      return;
+    }
+    if (picked.pieceId === state.selectedPieceId) {
+      clearSelection();
+      return;
+    }
+    selectPiece(picked.pieceId);
+  }
+
+  function describeCell(cell) {
+    return "Cell " + cell.x + ", " + cell.y + ", " + cell.z + "  ·  plane " + (cell.y + cell.z);
+  }
+
+  function handleHover(event) {
+    setPointerFromEvent(event);
+    const picked = pickUnderPointer();
+    const readout = byId("cell-readout");
+    viewport.style.cursor = picked ? "pointer" : "";
+    if (highlights) highlights.setHovered(picked && picked.kind === "move" ? picked.move : null);
+
+    if (!picked) {
+      readout.textContent = "";
+    } else if (picked.kind === "move") {
+      const move = picked.move;
+      const where = move.to.file !== undefined
+        ? "Row: file " + move.to.file + ", plane " + move.to.plane
+        : describeCell(move.to);
+      readout.textContent = where + (move.captureIds.length ? "  ·  capture" : "");
+    } else if (picked.kind === "piece") {
+      const piece = findPiece(picked.pieceId);
+      readout.textContent = piece ? capitalize(piece.side) + " " + piece.type + "  ·  " + Rules.describePlace(piece) : "";
+    } else {
+      readout.textContent = "Place holder (click to remove)";
+    }
+  }
+
+  /** Tell a click from the end of a drag: only small, quick pointer moves count. */
+  function setUpPointerHandling() {
+    const canvas = viewer.renderer.domElement;
+    let pressStart = null;
+    canvas.addEventListener("pointerdown", (event) => {
+      pressStart = { x: event.clientX, y: event.clientY, time: performance.now(), button: event.button };
+      viewer.stopCameraFlight();
+    });
+    canvas.addEventListener("pointerup", (event) => {
+      if (!pressStart || pressStart.button !== 0) return;
+      const moved = Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y);
+      const held = performance.now() - pressStart.time;
+      pressStart = null;
+      if (moved < 6 && held < 600) handleClick(event);
+    });
+    canvas.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "mouse") handleHover(event);
+    });
+    canvas.addEventListener("pointerleave", () => { byId("cell-readout").textContent = ""; });
+  }
+
+  // ===== Save and load =====
+
+  function timestampForFileName() {
+    const now = new Date();
+    const pad = (number) => String(number).padStart(2, "0");
+    return now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate()) +
+      "-" + pad(now.getHours()) + pad(now.getMinutes());
+  }
+
+  function saveGame() {
+    const text = Rules.gameToText(state.game);
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    link.download = "diagonal-3d-chess-" + timestampForFileName() + ".txt";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    showToast("Saved " + link.download);
+  }
+
+  function loadGameFromText(text, fileName) {
+    const { game, warnings } = Rules.textToGame(text);
+    if (game.pieces.length === 0) {
+      showToast("Could not load " + fileName + ": no pieces found.", 5);
+      return;
+    }
+    pushUndo();
+    state.game = game;
+    state.selectedPieceId = null;
+    refreshAll();
+    if (warnings.length > 0) {
+      console.warn("Load warnings:\n" + warnings.join("\n"));
+      showToast("Loaded " + fileName + " with " + warnings.length + " line(s) skipped (details in the console).", 6);
+    } else {
+      showToast("Loaded " + fileName + ". (Undo goes back to the game before.)");
+    }
+  }
+
+  function loadGameFromFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => loadGameFromText(String(reader.result), file.name);
+    reader.readAsText(file);
+  }
+
+  function setUpDragAndDrop() {
+    const dropHint = byId("drop-hint");
+    let dragDepth = 0;
+    window.addEventListener("dragenter", (event) => {
+      event.preventDefault();
+      dragDepth++;
+      dropHint.classList.add("is-visible");
+    });
+    window.addEventListener("dragleave", () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) dropHint.classList.remove("is-visible");
+    });
+    window.addEventListener("dragover", (event) => event.preventDefault());
+    window.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dragDepth = 0;
+      dropHint.classList.remove("is-visible");
+      loadGameFromFile(event.dataTransfer.files[0]);
+    });
+  }
+
+  // ===== Side panel =====
+
+  function updateStatus() {
+    const turn = state.game.turn;
+    byId("turn-dot").style.background = turn === "red" ? "var(--red-side)" : "var(--black-side)";
+    let text = capitalize(turn) + " to move";
+    const redKing = state.game.pieces.some((piece) => piece.side === "red" && piece.type === "king");
+    const blackKing = state.game.pieces.some((piece) => piece.side === "black" && piece.type === "king");
+    let warning = "";
+    if (!redKing) warning = "Red has no king";
+    else if (!blackKing) warning = "Black has no king";
+    else if (Rules.isInCheck(turn, state.game.pieces)) warning = capitalize(turn) + " is in check!";
+    if (state.showingAvailableMoves) {
+      const count = state.availablePieceIds.length;
+      text = count === 0 ? "Available moves: click pieces to show their moves"
+        : "Available moves of " + count + " piece" + (count === 1 ? "" : "s");
+    }
+    byId("status-text").innerHTML = text + (warning ? ' · <span class="warning">' + warning + "</span>" : "");
+  }
+
+  function updateSelectedInfo() {
+    const piece = findPiece(state.selectedPieceId);
+    const info = byId("selected-info");
+    if (!piece) {
+      info.textContent = state.showingAvailableMoves
+        ? "Showing available moves (turn off Select pieces to play)."
+        : "Click a piece to select it.";
+    } else {
+      const moveCount = state.currentMoves.length;
+      const captures = state.currentMoves.filter((move) => move.captureIds.length > 0).length;
+      info.innerHTML = "<b>" + capitalize(piece.side) + " " + piece.type + "</b> at " + Rules.describePlace(piece) +
+        "<br>" + moveCount + " move" + (moveCount === 1 ? "" : "s") +
+        (captures ? ", " + captures + " capture" + (captures === 1 ? "" : "s") : "") +
+        (state.moveMode === "free" ? " on plane " + state.freePlane : "") + ".";
+    }
+    byId("deselect").disabled = !piece;
+    byId("remove-piece").disabled = !piece;
+  }
+
+  function updateCapturedLists() {
+    for (const side of Rules.SIDES) {
+      byId("captured-" + side).textContent = state.game.captured
+        .filter((captured) => captured.side === side)
+        .map((captured) => PIECE_SYMBOLS[captured.type])
+        .join("");
+    }
+    const log = byId("move-log");
+    log.innerHTML = "";
+    for (const line of state.game.moveLog) {
+      const item = document.createElement("li");
+      item.textContent = line;
+      log.appendChild(item);
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function updateModeControls() {
+    document.querySelectorAll("[data-mode]").forEach((button) =>
+      button.classList.toggle("is-on", button.dataset.mode === state.moveMode));
+    document.querySelectorAll("[data-style]").forEach((button) =>
+      button.classList.toggle("is-on", button.dataset.style === state.highlightStyle));
+    byId("enforce-turns").checked = state.enforceTurns;
+    byId("enforce-turns").disabled = state.moveMode === "free";
+
+    const showPlane = state.moveMode === "free" && !state.showingAvailableMoves;
+    byId("plane-area").hidden = !showPlane;
+    byId("plane-slider").value = state.freePlane;
+    byId("plane-number").textContent = state.freePlane;
+    byId("mode-hint").textContent = state.moveMode === "free"
+      ? "Free moves: any piece, any side, anywhere on the chosen plane."
+      : "Classic moves for each piece. See ABOUT › Pieces for the rules.";
+
+    byId("show-lines").checked = state.showLines;
+    byId("select-pieces").classList.toggle("is-on", state.showingAvailableMoves);
+    byId("select-pieces").setAttribute("aria-pressed", String(state.showingAvailableMoves));
+    byId("clear-available").disabled = state.availablePieceIds.length === 0;
+    byId("undo").disabled = state.undoStack.length === 0;
+  }
+
+  function updatePanel() {
+    updateStatus();
+    updateSelectedInfo();
+    updateCapturedLists();
+    updateModeControls();
+  }
+
+  function setFreePlane(plane) {
+    state.freePlane = Math.max(0, Math.min(Rules.LAST_PLANE, plane));
+    refreshHighlights();
+    updatePanel();
+  }
+
+  function buildPiecesDialog() {
+    const order = ["king", "queen", "rook", "bishop", "knight", "pawn"];
+    byId("pieces-dialog-body").innerHTML = order.map((type) =>
+      "<h3>" + PIECE_SYMBOLS[type] + " THE " + type.toUpperCase() + "</h3><p>" + Rules.PIECE_DESCRIPTIONS[type] + "</p>"
+    ).join("") +
+      '<p class="hint">See every piece and its moves up close in the <a href="game-studio.html">Game Studio</a>.</p>';
+  }
+
+  /** Colour the little legend squares to match the look settings. */
+  function colorAvailableMovesLegend() {
+    byId("legend-red").style.background = look.redMovesColor;
+    byId("legend-black").style.background = look.blackMovesColor;
+    byId("legend-shared").style.background = look.sharedMovesColor;
+  }
+
+  // ===== Header menus (GAME, ABOUT) =====
+
+  function closeMenus() {
+    document.querySelectorAll(".menu-button").forEach((button) => {
+      button.setAttribute("aria-expanded", "false");
+      byId(button.getAttribute("aria-controls")).hidden = true;
+    });
+  }
+
+  function setUpMenus() {
+    document.querySelectorAll(".menu-button").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const wasOpen = button.getAttribute("aria-expanded") === "true";
+        closeMenus();
+        if (!wasOpen) {
+          button.setAttribute("aria-expanded", "true");
+          byId(button.getAttribute("aria-controls")).hidden = false;
+        }
+      });
+    });
+    // Choosing an item, clicking elsewhere, or pressing Esc closes the menu.
+    document.querySelectorAll(".menu-list button, .menu-list a").forEach((item) =>
+      item.addEventListener("click", closeMenus));
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".menu")) closeMenus();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeMenus();
+    });
+  }
+
+  // ===== Wiring up the controls =====
+
+  function setUpControls() {
+    byId("new-game").addEventListener("click", newGame);
+    byId("undo").addEventListener("click", undo);
+    byId("save-game").addEventListener("click", saveGame);
+    byId("load-game").addEventListener("click", () => byId("load-file").click());
+    byId("load-file").addEventListener("change", (event) => {
+      loadGameFromFile(event.target.files[0]);
+      event.target.value = "";
+    });
+
+    document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => {
+      state.moveMode = button.dataset.mode;
+      refreshHighlights();
+      updatePanel();
+    }));
+    document.querySelectorAll("[data-style]").forEach((button) => button.addEventListener("click", () => {
+      state.highlightStyle = button.dataset.style;
+      savePreferences();
+      refreshHighlights();
+      updatePanel();
+    }));
+    byId("enforce-turns").addEventListener("change", (event) => {
+      state.enforceTurns = event.target.checked;
+      savePreferences();
+    });
+    byId("plane-slider").addEventListener("input", (event) => setFreePlane(Number(event.target.value)));
+    byId("plane-down").addEventListener("click", () => setFreePlane(state.freePlane - 1));
+    byId("plane-up").addEventListener("click", () => setFreePlane(state.freePlane + 1));
+
+    byId("show-grid").addEventListener("change", (event) => {
+      board.userData.cellGrid.visible = event.target.checked;
+      savePreferences();
+    });
+    byId("auto-spin").addEventListener("change", (event) => {
+      viewer.controls.autoRotate = event.target.checked;
+      viewer.controls.autoRotateSpeed = 0.6;
+    });
+
+    byId("deselect").addEventListener("click", clearSelection);
+    byId("remove-piece").addEventListener("click", removeSelectedPiece);
+    byId("select-pieces").addEventListener("click", () => setShowingAvailableMoves(!state.showingAvailableMoves));
+    byId("clear-available").addEventListener("click", clearAvailableMoves);
+    byId("show-lines").addEventListener("change", (event) => {
+      state.showLines = event.target.checked;
+      savePreferences();
+      refreshHighlights();
+    });
+    byId("reset-view").addEventListener("click", () => viewer.flyTo("corner", viewDistanceScale()));
+
+    document.querySelectorAll("details.section").forEach((box) =>
+      box.addEventListener("toggle", savePreferences));
+    byId("panel-toggle").addEventListener("click", () => {
+      setPanelCollapsed(!isPanelCollapsed());
+      savePreferences();
+    });
+
+    // Dialogs
+    byId("open-help").addEventListener("click", () => byId("help-dialog").showModal());
+    byId("open-pieces").addEventListener("click", () => byId("pieces-dialog").showModal());
+    byId("open-about").addEventListener("click", () => byId("about-dialog").showModal());
+    document.querySelectorAll("[data-close]").forEach((button) =>
+      button.addEventListener("click", () => button.closest("dialog").close()));
+    document.querySelectorAll("[data-promote]").forEach((button) =>
+      button.addEventListener("click", () => choosePromotion(button.dataset.promote)));
+    byId("promotion-dialog").addEventListener("cancel", (event) => {
+      event.preventDefault(); // a choice is needed; "Stay a pawn" is the way out
+    });
+
+    // Keyboard
+    window.addEventListener("keydown", (event) => {
+      if (document.querySelector("dialog[open]")) return;
+      if (event.target.tagName === "INPUT") return;
+      if (event.key === "Escape") {
+        if (state.showingAvailableMoves) clearAvailableMoves();
+        else clearSelection();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); undo(); }
+      if (event.key === "[") setFreePlane(state.freePlane - 1);
+      if (event.key === "]") setFreePlane(state.freePlane + 1);
+    });
+  }
+
+  /** Phones are tall and narrow: stand further back so the whole board fits. */
+  function viewDistanceScale() {
+    const aspect = viewport.clientWidth / Math.max(1, viewport.clientHeight);
+    return aspect < 1 ? 1 + (1 - aspect) * 0.9 : 1;
+  }
+
+  // ===== Start =====
+
+  // For poking at the game from the browser console (handy when debugging).
+  window.chessDebug = { state, viewer, board, piecesLayer, railLayer, refreshAll, performMove, animations };
+
+  async function start() {
+    restoreCurrentGame();
+    loadPreferences();
+    board.userData.cellGrid.visible = byId("show-grid").checked;
+    colorAvailableMovesLegend();
+    buildPiecesDialog();
+    setUpControls();
+    setUpMenus();
+    setUpPointerHandling();
+    setUpDragAndDrop();
+    viewer.onFrame(stepAnimations);
+    updatePanel();
+    viewer.flyTo("corner", viewDistanceScale());
+
+    try {
+      models = await Scene3D.loadPieceModels();
+    } catch (error) {
+      console.error(error);
+      byId("loading").textContent = "Could not load the piece models (models/pieces.js).";
+      return;
+    }
+    byId("loading").remove();
+    refreshAll();
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

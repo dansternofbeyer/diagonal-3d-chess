@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<!--
+  game-studio.html — the Diagonal 3D Chess asset studio.
+
+  A workbench for looking at and adjusting every 3D asset: each piece on its
+  own or on the board with its moves lit up, plus the board itself. Colours,
+  sizes and highlight styles can be changed here; changes are kept in this
+  browser (and used by the game straight away) or downloaded as a new
+  js/look-settings.js. A .glb from Blender can be dropped in to preview a new
+  model before it is bundled into the game.
+
+  Open source under the MIT License (see LICENSE).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Game Studio</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #141518;
+    --surface: #1c1d21;
+    --overlay: rgba(20,21,24,0.88);
+    --ink: #d9d9dc;
+    --muted: #8d8f96;
+    --rule: #34363c;
+    --link: #f0a243;
+    --banner: #f2b544;
+    --banner-soft: rgba(242,181,68,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--page); color: var(--ink);
+    font: 12px/1.5 Verdana, Geneva, Tahoma, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button, select, input { font: inherit; color: inherit; }
+
+  /* ===== Header ===== */
+  .site-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 16px; border-bottom: 1px solid var(--rule); flex-wrap: wrap;
+  }
+  .site-title { letter-spacing: 0.08em; white-space: nowrap; }
+  .site-nav a { border: 1px solid var(--rule); padding: 3px 10px; font-size: 11px; }
+  .site-nav a:hover { background: var(--banner-soft); text-decoration: none; }
+
+  /* ===== Layout: asset list | 3D view | settings ===== */
+  .layout { flex: 1; display: grid; grid-template-columns: 150px 1fr 300px; min-height: 0; }
+  .asset-list { border-right: 1px solid var(--rule); overflow-y: auto; padding: 10px; display: grid; gap: 4px; align-content: start; }
+  .asset-list h2, .panel h2 {
+    margin: 0 0 4px; font-size: 11px; font-weight: normal; letter-spacing: 0.08em; color: var(--muted);
+  }
+  .asset-button {
+    display: flex; align-items: center; gap: 8px; border: 1px solid var(--rule); background: var(--surface);
+    padding: 5px 8px; cursor: pointer; color: var(--link); text-align: left;
+  }
+  .asset-button .symbol { font-size: 18px; width: 20px; text-align: center; color: var(--ink); }
+  .asset-button:hover { background: var(--banner-soft); }
+  .asset-button.is-on { background: var(--banner); color: #000; border-color: #d49a2c; }
+  .viewport { position: relative; min-width: 0; overflow: hidden; touch-action: none; }
+  .viewport canvas { display: block; }
+  .panel { border-left: 1px solid var(--rule); overflow-y: auto; padding: 10px 12px 16px; }
+
+  @media (max-width: 860px) {
+    body { height: auto; min-height: 100%; }
+    .layout { grid-template-columns: 1fr; }
+    .asset-list { grid-template-columns: repeat(4, 1fr); border-right: none; border-bottom: 1px solid var(--rule); }
+    .asset-list h2 { grid-column: 1 / -1; }
+    .asset-button { justify-content: center; padding: 4px; }
+    .viewport { height: 58vh; }
+    .panel { border-left: none; border-top: 1px solid var(--rule); }
+  }
+
+  /* ===== Panel pieces ===== */
+  .section { border: 1px solid var(--rule); margin-bottom: 10px; }
+  .section h3 {
+    margin: 0; padding: 4px 8px; font-size: 11px; font-weight: normal; letter-spacing: 0.08em;
+    text-align: center; border-bottom: 1px solid var(--rule); background: var(--surface);
+  }
+  .section .body { padding: 8px; display: grid; gap: 6px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .button {
+    border: 1px solid var(--rule); background: var(--surface); padding: 4px 8px; cursor: pointer;
+    color: var(--link); flex: 1; min-width: 0; text-align: center;
+  }
+  .button:hover { background: var(--banner-soft); }
+  .button.is-on { background: var(--banner); color: #000; border-color: #d49a2c; }
+  .choice-group { display: flex; border: 1px solid var(--rule); }
+  .choice-group .button { border: none; border-right: 1px solid var(--rule); }
+  .choice-group .button:last-child { border-right: none; }
+  /* Five versions don't fit on one line: let them wrap into a tidy grid. */
+  #version-choices { display: grid; grid-template-columns: repeat(3, 1fr); }
+  #version-choices .button { border-bottom: 1px solid var(--rule); }
+  .field { display: grid; grid-template-columns: 92px 1fr 40px; gap: 6px; align-items: center; }
+  .field input[type=range] { width: 100%; }
+  .field input[type=color] { width: 100%; height: 22px; border: 1px solid var(--rule); padding: 0; background: var(--surface); }
+  .field output { text-align: right; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 11px; }
+  .stats { font-family: Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); }
+  label.check { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .footer { text-align: center; color: var(--muted); font-size: 11px; margin-top: 12px; }
+  .overlay-title {
+    position: absolute; top: 10px; left: 10px; background: var(--overlay);
+    border: 1px solid var(--rule); padding: 5px 10px; pointer-events: none; max-width: calc(100% - 20px);
+  }
+  .overlay-title b { letter-spacing: 0.06em; }
+  .toast {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--banner); padding: 6px 12px; display: none; max-width: 90%;
+  }
+  .toast.is-visible { display: block; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-title">..DIAGONAL 3D CHESS - <b>GAME STUDIO</b>..</div>
+  <nav class="site-nav"><a href="index.html">..BACK TO THE GAME..</a></nav>
+</header>
+
+<div class="layout">
+  <!-- ===== Asset list ===== -->
+  <nav class="asset-list" id="asset-list" aria-label="Assets">
+    <h2>ASSETS</h2>
+  </nav>
+
+  <!-- ===== 3D view ===== -->
+  <main class="viewport" id="viewport" aria-label="3D asset view. Drag to spin, right- or middle-drag to pan, scroll to zoom.">
+    <div class="overlay-title" id="overlay-title"></div>
+    <div class="toast" id="toast" role="status"></div>
+  </main>
+
+  <!-- ===== Settings ===== -->
+  <aside class="panel">
+    <!-- Keep changes: at the top so it is always in reach -->
+    <section class="section keep-changes">
+      <h3>..KEEP CHANGES..</h3>
+      <div class="body">
+        <div class="row">
+          <button type="button" class="button" id="save-look">Use in the game</button>
+          <button type="button" class="button" id="reset-look">Reset</button>
+        </div>
+        <button type="button" class="button" id="download-look">Download look-settings.js</button>
+        <div class="hint">“Use in the game” keeps your changes in this browser only. To make them permanent, download look-settings.js and replace the one in the <code>js</code> folder.</div>
+      </div>
+    </section>
+
+    <!-- Piece-only controls -->
+    <section class="section" id="piece-view-section">
+      <h3>..VIEW..</h3>
+      <div class="body">
+        <div class="choice-group" role="group" aria-label="Show piece">
+          <button type="button" class="button" data-show="alone">On its own</button>
+          <button type="button" class="button" data-show="compare">Compare versions</button>
+          <button type="button" class="button" data-show="board">On the board</button>
+        </div>
+        <div class="choice-group" role="group" aria-label="Side">
+          <button type="button" class="button" data-side="red">Red</button>
+          <button type="button" class="button" data-side="black">Black</button>
+        </div>
+        <label class="check"><input type="checkbox" id="turntable" checked> Turntable spin</label>
+        <div id="pawn-length-field" class="field" hidden>
+          <label for="pawn-length">Pawn length</label>
+          <input type="range" id="pawn-length" min="1" max="8" step="1" value="3">
+          <output id="pawn-length-value">3</output>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="moves-section">
+      <h3>..MOVES..</h3>
+      <div class="body">
+        <div id="move-description" class="hint"></div>
+        <div id="cell-fields"></div>
+        <div class="row">
+          <button type="button" class="button" id="place-center">Centre</button>
+          <button type="button" class="button" id="place-corner">Top-back corner</button>
+          <button type="button" class="button" id="place-home">Home edge</button>
+        </div>
+        <div class="choice-group" role="group" aria-label="Move highlight style">
+          <button type="button" class="button" data-style="blue">Cubes</button>
+          <button type="button" class="button" data-style="dots">Dots</button>
+        </div>
+        <div class="stats" id="move-count"></div>
+      </div>
+    </section>
+
+    <!-- Which version of each piece the game uses -->
+    <section class="section" id="version-section">
+      <h3>..VERSION..</h3>
+      <div class="body">
+        <div class="choice-group" role="group" aria-label="Piece version" id="version-choices"></div>
+        <button type="button" class="button" id="version-all">Use this version for every piece</button>
+        <div class="hint" id="version-hint">Compare versions shows them side by side, left to right; click one to choose it. Then press <b>Use in the game</b>.</div>
+      </div>
+    </section>
+
+    <!-- Looks of the selected piece -->
+    <section class="section" id="piece-look-section">
+      <h3>..PIECE LOOK..</h3>
+      <div class="body">
+        <div class="field"><label for="look-redColor">Red</label><input type="color" id="look-redColor" data-look="redColor"><span></span></div>
+        <div class="field"><label for="look-blackColor">Black</label><input type="color" id="look-blackColor" data-look="blackColor"><span></span></div>
+        <div class="field"><label for="look-trimLighten">Trim lighter by</label><input type="range" id="look-trimLighten" data-look="trimLighten" min="0" max="0.4" step="0.01"><output></output></div>
+        <div class="field"><label for="look-pieceRoughness">Roughness</label><input type="range" id="look-pieceRoughness" data-look="pieceRoughness" min="0" max="1" step="0.01"><output></output></div>
+        <div class="field"><label for="look-pieceMetalness">Metalness</label><input type="range" id="look-pieceMetalness" data-look="pieceMetalness" min="0" max="1" step="0.01"><output></output></div>
+        <div class="field"><label for="look-pieceShine">Gloss coat</label><input type="range" id="look-pieceShine" data-look="pieceShine" min="0" max="1" step="0.01"><output></output></div>
+        <div class="field"><label for="look-rimLight">Rim light</label><input type="range" id="look-rimLight" data-look="rimLight" min="0" max="1" step="0.01"><output></output></div>
+        <div class="field"><label for="piece-scale" id="piece-scale-label">Size</label><input type="range" id="piece-scale" min="0.5" max="1.5" step="0.01"><output id="piece-scale-value"></output></div>
+        <div class="stats" id="mesh-stats"></div>
+      </div>
+    </section>
+
+    <section class="section" id="board-look-section">
+      <h3>..BOARD LOOK..</h3>
+      <div class="body">
+        <div class="field"><label for="look-backgroundColor">Background</label><input type="color" id="look-backgroundColor" data-look="backgroundColor"><span></span></div>
+        <div class="field"><label for="look-frameColor">Frame</label><input type="color" id="look-frameColor" data-look="frameColor"><span></span></div>
+        <div class="field"><label for="look-frameOpacity">Frame see-through</label><input type="range" id="look-frameOpacity" data-look="frameOpacity" min="0.05" max="1" step="0.01"><output></output></div>
+        <div class="field"><label for="look-floorColor">Floor tiles</label><input type="color" id="look-floorColor" data-look="floorColor"><span></span></div>
+        <div class="field"><label for="look-floorOpacity">Floor see-through</label><input type="range" id="look-floorOpacity" data-look="floorOpacity" min="0.05" max="1" step="0.01"><output></output></div>
+        <div class="field"><label for="look-haze">Haze</label><input type="range" id="look-haze" data-look="haze" min="0" max="1" step="0.01"><output></output></div>
+        <div class="field"><label for="look-blueCubeColor">Blue cubes</label><input type="color" id="look-blueCubeColor" data-look="blueCubeColor"><span></span></div>
+        <div class="field"><label for="look-cubeOpacity">Cube see-through</label><input type="range" id="look-cubeOpacity" data-look="cubeOpacity" min="0.1" max="0.9" step="0.01"><output></output></div>
+        <div class="field"><label for="look-dotColor">Dots</label><input type="color" id="look-dotColor" data-look="dotColor"><span></span></div>
+        <div class="field"><label for="look-captureColor">Captures</label><input type="color" id="look-captureColor" data-look="captureColor"><span></span></div>
+        <div class="field"><label for="look-moveLineColor">Move lines</label><input type="color" id="look-moveLineColor" data-look="moveLineColor"><span></span></div>
+        <div class="field"><label for="look-redMovesColor">Red's moves</label><input type="color" id="look-redMovesColor" data-look="redMovesColor"><span></span></div>
+        <div class="field"><label for="look-blackMovesColor">Black's moves</label><input type="color" id="look-blackMovesColor" data-look="blackMovesColor"><span></span></div>
+        <div class="field"><label for="look-sharedMovesColor">Both sides</label><input type="color" id="look-sharedMovesColor" data-look="sharedMovesColor"><span></span></div>
+        <label class="check"><input type="checkbox" id="show-grid"> Dot in every cell</label>
+        <label class="check"><input type="checkbox" id="show-lines"> Move lines</label>
+      </div>
+    </section>
+
+
+    <section class="section" id="model-section">
+      <h3>..TRY A NEW MODEL..</h3>
+      <div class="body">
+        <div class="row">
+          <button type="button" class="button" id="try-model">Load a .glb…</button>
+          <button type="button" class="button" id="restore-model">Original</button>
+          <input type="file" id="model-file" accept=".glb" hidden>
+        </div>
+        <div class="hint" id="model-hint"></div>
+        <details>
+          <summary class="hint">How to change a model for good</summary>
+          <ol class="hint" style="padding-left:18px; margin:6px 0">
+            <li>Open <code>blender/pieces.blend</code> (or run <code>blender/build_pieces.py</code>).</li>
+            <li>Edit the piece. Keep it centred, about 0.8 wide and 0.9 tall. Use the material “Body” for the main colour and “Trim” for accents.</li>
+            <li>Export it as <code>models/&lt;name&gt;.glb</code> (or run the script's export).</li>
+            <li>Run <code>python3 tools/bundle_models.py</code> in the project folder.</li>
+            <li>Reload this page.</li>
+          </ol>
+        </details>
+      </div>
+    </section>
+
+    <div class="footer">Open source under the <a href="LICENSE">MIT License</a>.</div>
+  </aside>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/OrbitControls.js"></script>
+<script src="lib/GLTFLoader.js"></script>
+<script src="models/pieces.js"></script>
+<script src="js/look-settings.js"></script>
+<script src="js/chess-rules.js"></script>
+<script src="js/chess-scene.js"></script>
+
+<script>
+/* ==========================================================================
+   The studio: pick an asset on the left, look at it in the middle, change
+   how it looks on the right.
+   ========================================================================== */
+(function () {
+  "use strict";
+
+  const Rules = window.ChessRules;
+  const Scene3D = window.ChessScene;
+  const byId = (id) => document.getElementById(id);
+
+  const ASSETS = [
+    { id: "king", label: "King", symbol: "♚" },
+    { id: "queen", label: "Queen", symbol: "♛" },
+    { id: "rook", label: "Rook", symbol: "♜" },
+    { id: "bishop", label: "Bishop", symbol: "♝" },
+    { id: "knight", label: "Knight", symbol: "♞" },
+    { id: "pawn", label: "Pawn", symbol: "♟" },
+    { id: "board", label: "Board", symbol: "⬚" },
+    { id: "set", label: "Full set", symbol: "♔" },
+  ];
+
+  // ===== State =====
+
+  const state = {
+    asset: "queen",
+    show: "board",          // "alone", "compare" (every version side by side) or "board"
+    side: "red",
+    highlightStyle: "blue",
+    cell: { x: 7, y: 0, z: 7 },     // where a piece stands on the board (top-back corner)
+    pawn: { file: 3, plane: 7 },    // where a pawn stands on the board
+    pawnLength: 3,                  // pawn length when shown on its own
+  };
+
+  let look = Scene3D.loadLook();
+  let models = null;
+  const originalModels = {};        // so "Original" can undo a trial .glb
+
+  const viewport = byId("viewport");
+  const viewer = Scene3D.createViewer(viewport, look);
+  const stage = new THREE.Group();  // everything shown is rebuilt into this
+  viewer.scene.add(stage);
+  let lastViewKey = "";
+
+  // ===== Helpers =====
+
+  function isPiece(asset) {
+    return Rules.PIECE_TYPES.includes(asset);
+  }
+
+  let toastTimer = null;
+  function showToast(message) {
+    const toast = byId("toast");
+    toast.textContent = message;
+    toast.classList.add("is-visible");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 3500);
+  }
+
+  /** The piece (in rules form) currently being shown on the board. */
+  function currentPiece() {
+    if (state.asset === "pawn") return Rules.makePiece(state.side, "pawn", state.pawn);
+    return Rules.makePiece(state.side, state.asset, state.cell);
+  }
+
+  function countTriangles(object) {
+    let triangles = 0;
+    object.traverse((child) => {
+      if (child.isMesh) {
+        const geometry = child.geometry;
+        triangles += (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
+      }
+    });
+    return Math.round(triangles);
+  }
+
+  /** A wireframe of one tilted board cell, to show how a piece fits inside it. */
+  function buildCellOutline(cells) {
+    const group = Scene3D.createCubeSpaceGroup();
+    const material = new THREE.LineBasicMaterial({ color: 0x9fb4c0, transparent: true, opacity: 0.8 });
+    const geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+    for (const cell of cells) {
+      const outline = new THREE.LineSegments(geometry, material);
+      outline.position.copy(cell);
+      group.add(outline);
+    }
+    return group;
+  }
+
+  // ===== Building what is shown =====
+
+  function clearStage() {
+    while (stage.children.length > 0) stage.remove(stage.children[0]);
+  }
+
+  /** A single piece at the origin, inside an outline of its cell (or row of cells). */
+  function showPieceAlone(materials) {
+    let object;
+    let outlineCells;
+    if (state.asset === "pawn") {
+      // Stand a pawn of the chosen length in the middle of a row.
+      const piece = Rules.makePiece(state.side, "pawn", { file: 0, plane: state.pawnLength - 1 });
+      object = Scene3D.buildPieceObject(piece, models, materials, look);
+      object.position.set(0, 0, 0);
+      // Outline the row's cells, shifted so the row's middle sits at the origin.
+      const rowCenters = Rules.rowCells(0, state.pawnLength - 1)
+        .map((cell) => Scene3D.cellToCubeSpace(cell.x, cell.y, cell.z));
+      const middle = new THREE.Vector3();
+      rowCenters.forEach((center) => middle.add(center));
+      middle.divideScalar(rowCenters.length);
+      outlineCells = rowCenters.map((center) => center.sub(middle));
+    } else {
+      const piece = Rules.makePiece(state.side, state.asset, { x: 0, y: 0, z: 0 });
+      object = Scene3D.buildPieceObject(piece, models, materials, look);
+      object.position.set(0, 0, 0);
+      outlineCells = [new THREE.Vector3(0, 0, 0)];
+    }
+    stage.add(object);
+    stage.add(buildCellOutline(outlineCells));
+    return object;
+  }
+
+  const COMPARE_SPACING = 0.95;
+
+  /** Every version of the piece side by side, the chosen one outlined in gold. */
+  function showVersionsSideBySide(materials) {
+    const versions = Scene3D.PIECE_VERSIONS;
+    const chosen = Scene3D.versionOf(state.asset, look);
+    let chosenObject = null;
+    versions.forEach((version, index) => {
+      const place = state.asset === "pawn" ? { file: 0, plane: state.pawnLength - 1 } : { x: 0, y: 0, z: 0 };
+      const piece = Rules.makePiece(state.side, state.asset, place);
+      const object = Scene3D.buildPieceObject(piece, models, materials, look, version.id);
+      object.position.set((index - (versions.length - 1) / 2) * COMPARE_SPACING, 0, 0);
+      object.userData.version = version.id;
+      object.userData.spins = true;
+      stage.add(object);
+      if (version.id === chosen) chosenObject = object;
+    });
+    if (chosenObject) {
+      const bounds = new THREE.Box3().setFromObject(chosenObject).expandByScalar(0.05);
+      stage.add(new THREE.Box3Helper(bounds, new THREE.Color("#e89a12")));
+    }
+    return chosenObject;
+  }
+
+  /** Clicking a piece in Compare versions chooses that version. */
+  function setUpVersionPicking() {
+    const raycaster = new THREE.Raycaster();
+    const canvas = viewer.renderer.domElement;
+    let pressedAt = null;
+    canvas.addEventListener("pointerdown", (event) => { pressedAt = { x: event.clientX, y: event.clientY }; });
+    canvas.addEventListener("pointerup", (event) => {
+      if (!pressedAt || state.show !== "compare" || !isPiece(state.asset)) return;
+      if (Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) > 6) return;
+      const bounds = canvas.getBoundingClientRect();
+      const pointer = new THREE.Vector2(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, viewer.camera);
+      for (const hit of raycaster.intersectObjects(stage.children, true)) {
+        let object = hit.object;
+        while (object && !object.userData.version) object = object.parent;
+        if (object) { chooseVersion(object.userData.version); return; }
+      }
+    });
+    // In Compare versions each piece turns on its own spot instead of the camera circling.
+    viewer.onFrame((deltaSeconds) => {
+      if (state.show !== "compare" || !byId("turntable").checked) return;
+      for (const child of stage.children) {
+        if (child.userData.spins) child.rotation.y += deltaSeconds * 0.6;
+      }
+    });
+  }
+
+  function chooseVersion(versionId) {
+    look.pieceVersions[state.asset] = versionId;
+    updatePanel();
+    render();
+  }
+
+  function buildVersionButtons() {
+    const holder = byId("version-choices");
+    for (const version of Scene3D.PIECE_VERSIONS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button";
+      button.dataset.version = version.id;
+      button.textContent = version.label;
+      button.addEventListener("click", () => {
+        if (isPiece(state.asset)) {
+          chooseVersion(version.id);
+        } else {
+          // On the full set, a version button sets every piece at once.
+          for (const type of Rules.PIECE_TYPES) look.pieceVersions[type] = version.id;
+          updatePanel();
+          render();
+        }
+      });
+      holder.appendChild(button);
+    }
+    byId("version-all").addEventListener("click", () => {
+      const version = Scene3D.versionOf(state.asset, look);
+      for (const type of Rules.PIECE_TYPES) look.pieceVersions[type] = version;
+      showToast("Every piece now uses the " + version + " version. Press Use in the game to keep it.");
+      render();
+    });
+  }
+
+  /** The board with one piece on it and its moves lit up. */
+  function showPieceOnBoard(materials) {
+    const board = Scene3D.buildBoard(look);
+    board.userData.cellGrid.visible = byId("show-grid").checked;
+    stage.add(board);
+    const piece = currentPiece();
+    const object = Scene3D.buildPieceObject(piece, models, materials, look);
+    stage.add(object);
+    const moves = Rules.getClassicMoves(piece, [piece]);
+    stage.add(Scene3D.buildMoveHighlights(moves, state.highlightStyle, look, piece, byId("show-lines").checked).group);
+    byId("move-count").textContent = moves.length + " moves from " + Rules.describePlace(piece) + " on an empty board.";
+    return object;
+  }
+
+  function showBoard(withPieces) {
+    const board = Scene3D.buildBoard(look);
+    board.userData.cellGrid.visible = byId("show-grid").checked;
+    stage.add(board);
+    if (withPieces) {
+      const materials = Scene3D.createPieceMaterials(look);
+      for (const piece of Rules.createNewGame().pieces) {
+        stage.add(Scene3D.buildPieceObject(piece, models, materials, look));
+      }
+    } else {
+      // Show the move highlight style on one plane so it can be judged against the board.
+      const sample = Rules.planeCells(7).filter((cell) => cell.x % 2 === 0)
+        .map((cell) => ({ pieceId: null, to: cell, cells: [cell], captureIds: [] }));
+      stage.add(Scene3D.buildMoveHighlights(sample, state.highlightStyle, look).group);
+    }
+  }
+
+  /** Rebuild the 3D view from the current state and look. */
+  function render() {
+    if (!models) return;
+    clearStage();
+    viewer.setBackgroundColor(look.backgroundColor);
+    viewer.setHaze(look.haze, look.backgroundColor);
+    const materials = Scene3D.createPieceMaterials(look);
+    let pieceObject = null;
+
+    if (isPiece(state.asset)) {
+      if (state.show === "alone") pieceObject = showPieceAlone(materials);
+      else if (state.show === "compare") pieceObject = showVersionsSideBySide(materials);
+      else pieceObject = showPieceOnBoard(materials);
+    } else {
+      showBoard(state.asset === "set");
+    }
+
+    if (pieceObject) {
+      const size = new THREE.Box3().setFromObject(pieceObject).getSize(new THREE.Vector3());
+      byId("mesh-stats").textContent = countTriangles(pieceObject) + " triangles · " +
+        size.x.toFixed(2) + " × " + size.y.toFixed(2) + " × " + size.z.toFixed(2) + " cells";
+    }
+    placeCameraIfViewChanged();
+    updateTitle();
+  }
+
+  /** Only move the camera when switching between a close-up and the board. */
+  function placeCameraIfViewChanged() {
+    const closeUp = isPiece(state.asset) && state.show === "alone";
+    const comparing = isPiece(state.asset) && state.show === "compare";
+    const pawnSize = state.asset === "pawn" ? state.pawnLength : 1;
+    const viewKey = closeUp ? "close:" + pawnSize : comparing ? "compare:" + pawnSize : "board";
+    if (viewKey === lastViewKey) return;
+    lastViewKey = viewKey;
+    viewer.controls.autoRotate = byId("turntable").checked && !comparing;
+    if (comparing) {
+      // Fit all the versions across the view.
+      const aspect = viewport.clientWidth / Math.max(1, viewport.clientHeight);
+      const halfRowWidth = ((Scene3D.PIECE_VERSIONS.length - 1) * COMPARE_SPACING + 1.1) / 2;
+      const fitWidth = halfRowWidth / (Math.tan(THREE.MathUtils.degToRad(viewer.camera.fov / 2)) * aspect);
+      const distance = Math.max(fitWidth, 2.4 + pawnSize * 1.6);
+      viewer.stopCameraFlight();
+      viewer.controls.target.set(0, 0, 0);
+      viewer.camera.position.set(0, distance * 0.18, distance);
+    } else if (closeUp) {
+      // A pawn row is about 1.4 units tall per cell, so stand back further for long pawns.
+      const distance = state.asset === "pawn" ? 3 + state.pawnLength * 1.9 : 2.4;
+      viewer.stopCameraFlight();
+      viewer.controls.target.set(0, 0, 0);
+      viewer.camera.position.set(distance * 0.55, distance * 0.3, distance * 0.85);
+    } else {
+      viewer.flyTo("corner", viewport.clientWidth < viewport.clientHeight ? 1.4 : 1);
+    }
+  }
+
+  function updateTitle() {
+    const asset = ASSETS.find((candidate) => candidate.id === state.asset);
+    let text = "<b>" + asset.label.toUpperCase() + "</b>";
+    if (isPiece(state.asset)) text += " · " + state.side + (state.show === "board" ? " · on the board" : "");
+    if (isPiece(state.asset) && state.show === "compare") {
+      text += " · " + Scene3D.PIECE_VERSIONS.map((version) => version.label).join(" · ") + " (left to right)";
+    }
+    if (state.asset === "board") text += " · sample move cubes on plane 7";
+    if (state.asset === "set") text += " · starting position";
+    byId("overlay-title").innerHTML = text;
+  }
+
+  // ===== Panel =====
+
+  function buildAssetList() {
+    const list = byId("asset-list");
+    for (const asset of ASSETS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "asset-button";
+      button.dataset.asset = asset.id;
+      button.innerHTML = '<span class="symbol">' + asset.symbol + "</span>" + asset.label;
+      button.addEventListener("click", () => {
+        state.asset = asset.id;
+        updatePanel();
+        render();
+      });
+      list.appendChild(button);
+    }
+  }
+
+  /** Sliders for where the piece stands: x/y/z, or file/plane for a pawn. */
+  function buildCellFields() {
+    const holder = byId("cell-fields");
+    holder.innerHTML = "";
+    const fields = state.asset === "pawn"
+      ? [["file", 0, 7, state.pawn], ["plane", 0, 14, state.pawn]]
+      : [["x", 0, 7, state.cell], ["y", 0, 7, state.cell], ["z", 0, 7, state.cell]];
+    for (const [name, minimum, maximum, target] of fields) {
+      const field = document.createElement("div");
+      field.className = "field";
+      field.innerHTML = '<label>' + name + '</label><input type="range" min="' + minimum + '" max="' + maximum +
+        '" step="1" value="' + target[name] + '" aria-label="' + name + '"><output>' + target[name] + "</output>";
+      const slider = field.querySelector("input");
+      slider.addEventListener("input", () => {
+        target[name] = Number(slider.value);
+        field.querySelector("output").textContent = slider.value;
+        render();
+      });
+      holder.appendChild(field);
+    }
+  }
+
+  function placePiece(where) {
+    if (state.asset === "pawn") {
+      state.pawn = where === "center" ? { file: 3, plane: 7 }
+        : where === "corner" ? { file: 7, plane: 7 }
+          : { file: 3, plane: state.side === "red" ? 2 : 12 };
+    } else {
+      state.cell = where === "center" ? { x: 3, y: 3, z: 4 }
+        : where === "corner" ? { x: 7, y: 0, z: 7 }        // the old site's "top-back corner"
+          : state.side === "red" ? { x: 4, y: 0, z: 0 } : { x: 4, y: 7, z: 7 };
+    }
+    buildCellFields();
+    render();
+  }
+
+  function fillLookInputs() {
+    document.querySelectorAll("[data-look]").forEach((input) => {
+      input.value = look[input.dataset.look];
+      const output = input.parentElement.querySelector("output");
+      if (output) output.textContent = Number(input.value).toFixed(2);
+    });
+    const scale = look.pieceScale[state.asset] || 1;
+    byId("piece-scale").value = scale;
+    byId("piece-scale-value").textContent = Number(scale).toFixed(2);
+  }
+
+  function updatePanel() {
+    const pieceSelected = isPiece(state.asset);
+    document.querySelectorAll(".asset-button").forEach((button) =>
+      button.classList.toggle("is-on", button.dataset.asset === state.asset));
+    document.querySelectorAll("[data-show]").forEach((button) =>
+      button.classList.toggle("is-on", button.dataset.show === state.show));
+    document.querySelectorAll("[data-side]").forEach((button) =>
+      button.classList.toggle("is-on", button.dataset.side === state.side));
+    document.querySelectorAll("[data-style]").forEach((button) =>
+      button.classList.toggle("is-on", button.dataset.style === state.highlightStyle));
+
+    byId("piece-view-section").hidden = !pieceSelected;
+    byId("moves-section").hidden = !pieceSelected || state.show !== "board";
+    byId("piece-look-section").hidden = !pieceSelected && state.asset !== "set";
+    byId("model-section").hidden = !pieceSelected;
+    byId("version-section").hidden = !pieceSelected && state.asset !== "set";
+    byId("version-all").hidden = !pieceSelected;
+    byId("version-hint").hidden = !pieceSelected;
+    const chosenVersion = pieceSelected ? Scene3D.versionOf(state.asset, look) : null;
+    document.querySelectorAll("[data-version]").forEach((button) =>
+      button.classList.toggle("is-on", button.dataset.version === chosenVersion));
+    byId("pawn-length-field").hidden = !(state.asset === "pawn" && state.show === "alone");
+    byId("piece-scale-label").textContent = pieceSelected ? "Size of " + state.asset : "Size";
+    byId("piece-scale").disabled = !pieceSelected;
+
+    if (pieceSelected) {
+      byId("move-description").textContent = Rules.PIECE_DESCRIPTIONS[state.asset];
+      byId("model-hint").textContent = state.asset === "pawn"
+        ? "The pawn is two models: pawn_body (stretched to length) and pawn_cap (on both ends). A .glb loaded here replaces pawn_cap."
+        : "Preview a new " + state.asset + " model from Blender. It is only used on this page until bundled.";
+      buildCellFields();
+    }
+    if (state.asset !== "set" && !pieceSelected) byId("mesh-stats").textContent = "";
+    fillLookInputs();
+  }
+
+  // ===== Controls =====
+
+  function setUpControls() {
+    document.querySelectorAll("[data-show]").forEach((button) => button.addEventListener("click", () => {
+      state.show = button.dataset.show;
+      updatePanel();
+      render();
+    }));
+    document.querySelectorAll("[data-side]").forEach((button) => button.addEventListener("click", () => {
+      state.side = button.dataset.side;
+      updatePanel();
+      render();
+    }));
+    document.querySelectorAll("[data-style]").forEach((button) => button.addEventListener("click", () => {
+      state.highlightStyle = button.dataset.style;
+      updatePanel();
+      render();
+    }));
+    byId("pawn-length").addEventListener("input", (event) => {
+      state.pawnLength = Number(event.target.value);
+      byId("pawn-length-value").textContent = event.target.value;
+      render();
+    });
+    byId("turntable").addEventListener("change", (event) => {
+      viewer.controls.autoRotate = event.target.checked && state.show !== "compare";
+    });
+    viewer.controls.autoRotate = true;
+    viewer.controls.autoRotateSpeed = 1.2;
+
+    byId("place-center").addEventListener("click", () => placePiece("center"));
+    byId("place-corner").addEventListener("click", () => placePiece("corner"));
+    byId("place-home").addEventListener("click", () => placePiece("home"));
+    byId("show-grid").addEventListener("change", render);
+    byId("show-lines").addEventListener("change", render);
+
+    // Look editing: every [data-look] input writes straight into `look`.
+    document.querySelectorAll("[data-look]").forEach((input) => input.addEventListener("input", () => {
+      const isNumber = input.type === "range";
+      look[input.dataset.look] = isNumber ? Number(input.value) : input.value;
+      const output = input.parentElement.querySelector("output");
+      if (output) output.textContent = Number(input.value).toFixed(2);
+      render();
+    }));
+    byId("piece-scale").addEventListener("input", (event) => {
+      look.pieceScale[state.asset] = Number(event.target.value);
+      byId("piece-scale-value").textContent = Number(event.target.value).toFixed(2);
+      render();
+    });
+
+    byId("save-look").addEventListener("click", () => {
+      showToast(Scene3D.saveLook(look)
+        ? "Saved. The game in this browser now uses these looks."
+        : "This browser would not let the page save. Use Download instead.");
+    });
+    byId("reset-look").addEventListener("click", () => {
+      Scene3D.clearSavedLook();
+      look = Scene3D.loadLook();
+      updatePanel();
+      render();
+      showToast("Back to the looks in js/look-settings.js.");
+    });
+    byId("download-look").addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([Scene3D.lookToFileText(look)], { type: "text/javascript" }));
+      link.download = "look-settings.js";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    });
+
+    // Trying a new model
+    byId("try-model").addEventListener("click", () => byId("model-file").click());
+    byId("model-file").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      event.target.value = "";
+      if (!file) return;
+      const modelName = state.asset === "pawn" ? "pawn_cap" : state.asset;
+      try {
+        const object = await Scene3D.parseGlb(await file.arrayBuffer());
+        if (!originalModels[modelName]) originalModels[modelName] = models[modelName];
+        models[modelName] = object;
+        render();
+        showToast("Showing " + file.name + " as the " + modelName + ".");
+      } catch (error) {
+        console.error(error);
+        showToast("Could not read " + file.name + " as a .glb model.");
+      }
+    });
+    byId("restore-model").addEventListener("click", () => {
+      const modelName = state.asset === "pawn" ? "pawn_cap" : state.asset;
+      if (originalModels[modelName]) {
+        models[modelName] = originalModels[modelName];
+        delete originalModels[modelName];
+        render();
+      }
+    });
+  }
+
+  // ===== Start =====
+
+  window.studioDebug = { state, viewer, render };
+
+  async function start() {
+    buildAssetList();
+    buildVersionButtons();
+    setUpControls();
+    setUpVersionPicking();
+    updatePanel();
+    models = await Scene3D.loadPieceModels();
+    render();
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
