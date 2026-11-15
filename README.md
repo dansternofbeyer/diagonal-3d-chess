@@ -11,10 +11,11 @@ Pawns fill a whole upright row of cubes and **grow** as they cross the board.
 
 ## Play online
 
-[![Play in your browser](https://img.shields.io/badge/%E2%96%B6%20Play%20in%20your%20browser-online-f2b544?style=for-the-badge)](https://dansternofbeyer.github.io/diagonal-3d-chess/)
+<a href="https://dansternofbeyer.github.io/diagonal-3d-chess/" target="_blank" rel="noopener"><img alt="Play in your browser" height="56" src="https://img.shields.io/badge/%E2%96%B6%20Play%20in%20your%20browser-online-f2b544?style=for-the-badge"></a>
 
 The quickest way to try it: click the button above and the game opens in your
-browser. Nothing to download. (The piece studio is at
+browser. Nothing to download. (To keep this page open too, hold **Ctrl**, or
+**Cmd** on a Mac, as you click: the game opens in a new tab.) (The piece studio is at
 [game-studio.html](https://dansternofbeyer.github.io/diagonal-3d-chess/game-studio.html).)
 
 ## Download and play
@@ -110,7 +111,7 @@ To look at the pieces up close and change how they look, double-click
 
 ## Piece versions
 
-Every piece comes in three versions, chosen per piece in the Studio
+Every piece comes in three versions (the game starts with Ornate), chosen per piece in the Studio
 (**Compare versions** shows them side by side):
 
 ![King versions](docs/versions-king.png)
@@ -132,8 +133,8 @@ Every piece comes in three versions, chosen per piece in the Studio
 
 Every knight, in every version, faces the opponent.
 
-**Wood grain.** By default the pieces are rendered in wood: golden wood for Red and
-dark walnut for Black. The grain is painted by a shader as if each piece were
+**Wood grain.** By default the pieces are the Ornate version, rendered in wood: a red
+wood like padauk for Red and near-black ebony for Black. The grain is painted by a shader as if each piece were
 turned from a log, so it flows along the piece. Switch to plain gloss colours, or
 change the wood colours, under **Finish** in the Studio.
 

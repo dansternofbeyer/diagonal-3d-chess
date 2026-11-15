@@ -290,7 +290,7 @@
         <label class="check"><input type="checkbox" data-move-style="dots"> Glowing dots</label>
         <label class="check"><input type="checkbox" data-move-style="edges"> Cube edges (a thin outline of each cube)</label>
         <label class="check"><input type="checkbox" id="show-lines"> Move lines (a thin line along each move's path)</label>
-        <label class="check"><input type="checkbox" id="show-grid"> Show a dot in every cell</label>
+        <label class="check"><input type="checkbox" id="show-grid" checked> Show a dot in every cell</label>
         <label class="check"><input type="checkbox" id="auto-spin"> Slowly spin the board</label>
       </div>
     </details>
@@ -421,8 +421,8 @@
     selectedPieceId: null,
     moveMode: "classic",        // "classic" or "free"
     enforceTurns: true,
-    moveStyle: { cubes: true, dots: false, edges: false },   // how moves are shown (any mix)
-    showLines: false,           // thin lines along each move's path
+    moveStyle: { cubes: false, dots: true, edges: true },   // how moves are shown (any mix)
+    showLines: true,            // thin lines along each move's path
     freePlane: 7,
     showingAvailableMoves: false, // the Explore Moves toggle is ON
     availablePieceIds: [],      // pieces whose moves it shows
@@ -505,9 +505,15 @@
 
   // ===== Preferences (remembered in this browser) =====
 
+  // Bumped when the default display options change: older saved choices for
+  // how moves are shown are then dropped, so everyone sees the new defaults once.
+  const PREFERENCES_VERSION = 2;
+
   function loadPreferences() {
     try {
-      const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}");
+      const stored = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}");
+      const panelState = { panelCollapsed: stored.panelCollapsed, openSections: stored.openSections };
+      const saved = stored.preferencesVersion === PREFERENCES_VERSION ? stored : panelState;
       if (saved.moveStyle && typeof saved.moveStyle === "object") {
         state.moveStyle = { cubes: !!saved.moveStyle.cubes, dots: !!saved.moveStyle.dots, edges: !!saved.moveStyle.edges };
       } else if (saved.highlightStyle === "dots") {
@@ -528,6 +534,7 @@
   function savePreferences() {
     try {
       localStorage.setItem(PREFERENCES_KEY, JSON.stringify({
+        preferencesVersion: PREFERENCES_VERSION,
         moveStyle: state.moveStyle,
         showLines: state.showLines,
         enforceTurns: state.enforceTurns,
@@ -1309,7 +1316,7 @@
   // ===== Start =====
 
   // For poking at the game from the browser console (handy when debugging).
-  window.chessDebug = { state, viewer, board, piecesLayer, railLayer, refreshAll, performMove, animations };
+  window.chessDebug = { state, selectPiece, viewer, board, piecesLayer, railLayer, refreshAll, performMove, animations };
 
   async function start() {
     restoreCurrentGame();

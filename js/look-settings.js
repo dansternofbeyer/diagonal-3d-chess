@@ -10,7 +10,7 @@
  */
 window.CHESS_LOOK_DEFAULTS = {
   // Bumped when the defaults change in a way old saved studio edits should not override.
-  lookVersion: 2,
+  lookVersion: 3,
 
   // Piece colours. The trim is the same colour as the body, just a little lighter.
   redColor: "#d8200f",
@@ -22,20 +22,21 @@ window.CHESS_LOOK_DEFAULTS = {
   rimLight: 0.35,             // the soft glow around a piece's outline
 
   // Finish: "wood" (wood grain, painted by a shader) or "lacquer" (plain colours above).
-  // Wood colours come from the grain photos: golden wood for Red, dark walnut for Black.
+  // Two woods far apart, so the sides are easy to tell: a red wood like padauk
+  // for Red, and near-black ebony for Black.
   pieceFinish: "wood",
-  redWoodLight: "#b0703a",
-  redWoodDark: "#55290f",
-  blackWoodLight: "#6e4b33",
-  blackWoodDark: "#2a160b",
+  redWoodLight: "#c4552b",
+  redWoodDark: "#6e1f0c",
+  blackWoodLight: "#56443a",
+  blackWoodDark: "#0f0a07",
 
   // Size of each piece inside its cell (1 = as modelled in Blender)
   pieceScale: { king: 1, queen: 1, rook: 1, bishop: 1, knight: 1, pawn: 1 },
 
   // Which version of each piece to use: "original", "ornate" or "classic"
   // (compare them in the studio's "Compare versions" view).
-  pieceVersions: { king: "original", queen: "original", rook: "original",
-    bishop: "original", knight: "original", pawn: "original" },
+  pieceVersions: { king: "ornate", queen: "ornate", rook: "ornate",
+    bishop: "ornate", knight: "ornate", pawn: "ornate" },
 
   // Board
   backgroundColor: "#141518",

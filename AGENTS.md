@@ -85,6 +85,11 @@ Working and tested in Chrome, both over http and from `file://`:
 - **King and queen tips** (Original and Ornate): the king ends in tesseract nets
   (`add_tesseract_net`), the queen in dodecahedra (`add_dodecahedron`); both helpers are
   copied into `build_pieces.py` and `build_ornate_pieces.py` (scripts are standalone).
+- **Starting defaults**: Ornate pieces in wood (padauk red vs ebony black) via
+  `look-settings.js` (`lookVersion` 3); moves shown as glowing dots + cube edges +
+  move lines, with a dot in every cell (`state` defaults in index.html; saved
+  display choices older than `PREFERENCES_VERSION` 2 are dropped once).
+- **README links can't open a new tab**: GitHub strips `target="_blank"`.
 - **Wood finish** (`look.pieceFinish` = "wood" default | "lacquer"): procedural grain
   in the piece shader (`WOOD_SHADER_FUNCTIONS`, `addPieceShader` in chess-scene.js),
   from object-space position x16 (models have no UVs, so photos can't be mapped;
