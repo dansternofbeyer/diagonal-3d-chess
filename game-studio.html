@@ -98,6 +98,7 @@
   #version-choices .button { border-bottom: 1px solid var(--rule); }
   .field { display: grid; grid-template-columns: 92px 1fr 40px; gap: 6px; align-items: center; }
   .field input[type=range] { width: 100%; }
+  .field select { width: 100%; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); padding: 2px; }
   .field input[type=color] { width: 100%; height: 22px; border: 1px solid var(--rule); padding: 0; background: var(--surface); }
   .field output { text-align: right; color: var(--muted); }
   .hint { color: var(--muted); font-size: 11px; }
@@ -206,6 +207,11 @@
     <section class="section" id="piece-look-section">
       <h3>..PIECE LOOK..</h3>
       <div class="body">
+        <div class="field"><label for="look-pieceFinish">Finish</label><select id="look-pieceFinish" data-look="pieceFinish"><option value="wood">Wood grain</option><option value="lacquer">Gloss colour</option></select><span></span></div>
+        <div class="field"><label for="look-redWoodLight">Red wood, light</label><input type="color" id="look-redWoodLight" data-look="redWoodLight"><span></span></div>
+        <div class="field"><label for="look-redWoodDark">Red wood, dark</label><input type="color" id="look-redWoodDark" data-look="redWoodDark"><span></span></div>
+        <div class="field"><label for="look-blackWoodLight">Black wood, light</label><input type="color" id="look-blackWoodLight" data-look="blackWoodLight"><span></span></div>
+        <div class="field"><label for="look-blackWoodDark">Black wood, dark</label><input type="color" id="look-blackWoodDark" data-look="blackWoodDark"><span></span></div>
         <div class="field"><label for="look-redColor">Red</label><input type="color" id="look-redColor" data-look="redColor"><span></span></div>
         <div class="field"><label for="look-blackColor">Black</label><input type="color" id="look-blackColor" data-look="blackColor"><span></span></div>
         <div class="field"><label for="look-trimLighten">Trim lighter by</label><input type="range" id="look-trimLighten" data-look="trimLighten" min="0" max="0.4" step="0.01"><output></output></div>
@@ -411,6 +417,8 @@
       const piece = Rules.makePiece(state.side, state.asset, place);
       const object = Scene3D.buildPieceObject(piece, models, materials, look, version.id);
       object.position.set((index - (versions.length - 1) / 2) * COMPARE_SPACING, 0, 0);
+      // Knights face the opponent (away from this camera): show them side-on instead.
+      if (state.asset === "knight") object.rotation.y = -Math.PI / 2;
       object.userData.version = version.id;
       object.userData.spins = true;
       stage.add(object);

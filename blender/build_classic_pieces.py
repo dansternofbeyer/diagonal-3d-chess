@@ -378,25 +378,35 @@ def build_rook(mesh_data, style):
 
 # ===== The knight's horse head =====
 # A real 3D head, lofted like a ship's hull: a series of cross-sections along a
-# spine that rises up the neck, turns at the poll (top of the head) and runs
-# forward and down to the muzzle. Each section has its own width and its own
-# height above and below the spine, which gives the shape: a deep jowl under
-# the cheek, a slimmer bridge of the nose, and a soft square muzzle.
+# spine that rises up an arched neck, turns at the poll (between the ears) and
+# runs forward and down to the muzzle, like a carved Staunton knight. Each
+# section has its own width and its own depth above and below the spine, which
+# gives a horse's shape (see the reference photos of a horse's head in profile):
+#   - a long, flat face from forehead to nose
+#   - a big, round jowl (the jaw) under the eye, then a slim throat behind it
+#   - a muzzle that swells a little, with flared nostrils and a soft chin
+# Eyes are small almond shapes set into the head under a brow, not balls.
 # The head faces +X; the game turns the knight so it faces the opponent.
 
-# (x, z) of the spine, half width, height above the spine, height below it.
+# (x, z) of the spine, half width over the top (forehead / crest), half width
+# underneath (jaw / throat), depth above the spine and depth below it.
+# The jaw is wider and deeper than the forehead near the eye: that is the jowl.
 HORSE_SECTIONS = [
-    (-0.020, 0.170, 0.084, 0.100, 0.100),   # base of the neck (hidden in the collar)
-    (-0.034, 0.270, 0.080, 0.096, 0.090),
-    (-0.040, 0.360, 0.072, 0.088, 0.068),   # throat latch: the neck narrows under the jaw
-    (-0.022, 0.430, 0.070, 0.070, 0.104),   # poll: the top of the head, where it turns
-    (0.035, 0.462, 0.076, 0.052, 0.128),    # forehead and deep jowl (the jaw)
-    (0.098, 0.442, 0.064, 0.044, 0.094),    # cheek narrowing toward the nose
-    (0.158, 0.408, 0.054, 0.037, 0.060),    # bridge of the nose
-    (0.204, 0.382, 0.050, 0.033, 0.050),    # muzzle
-    (0.230, 0.369, 0.040, 0.024, 0.037),    # tip of the muzzle
+    (-0.020, 0.165, 0.085, 0.085, 0.105, 0.105),   # 0 base of the neck (hidden in the collar)
+    (-0.048, 0.250, 0.060, 0.064, 0.098, 0.076),   # 1 neck: arched crest behind
+    (-0.056, 0.325, 0.054, 0.056, 0.086, 0.052),   # 2 throat latch: slim under the jaw
+    (-0.046, 0.385, 0.056, 0.060, 0.070, 0.052),   # 3 poll, turning forward
+    (-0.010, 0.432, 0.062, 0.078, 0.052, 0.092),   # 4 behind the eye: the jowl
+    (0.050, 0.452, 0.064, 0.080, 0.042, 0.110),    # 5 eye, deepest jaw
+    (0.105, 0.430, 0.054, 0.060, 0.036, 0.082),    # 6 below the cheek
+    (0.150, 0.393, 0.046, 0.046, 0.034, 0.062),    # 7 long, flat face
+    (0.190, 0.356, 0.043, 0.043, 0.034, 0.054),    # 8 bridge of the nose
+    (0.222, 0.325, 0.046, 0.047, 0.036, 0.056),    # 9 muzzle swells a little
+    (0.246, 0.302, 0.043, 0.044, 0.032, 0.050),    # 10
+    (0.262, 0.288, 0.034, 0.035, 0.024, 0.038),    # 11 the nose rounds off
+    (0.271, 0.279, 0.018, 0.018, 0.012, 0.020),    # 12
 ]
-HORSE_SIDES = 14
+HORSE_SIDES = 16
 
 
 def horse_frames():
@@ -414,10 +424,54 @@ def horse_frames():
     return frames
 
 
+def head_point(frames, along, side, height):
+    """A point on (or near) the head's surface, for placing features.
+    along: section number (can be a fraction). side: -1..1 across the head.
+    height: -1 (throat/jaw) .. 1 (mane/forehead)."""
+    lower = min(int(along), len(HORSE_SECTIONS) - 2)
+    mix = along - lower
+    spine = frames[lower][0].lerp(frames[lower + 1][0], mix)
+    forward = frames[lower][1].lerp(frames[lower + 1][1], mix).normalized()
+    up = frames[lower][2].lerp(frames[lower + 1][2], mix).normalized()
+    section = [near + (far - near) * mix for near, far in zip(HORSE_SECTIONS[lower], HORSE_SECTIONS[lower + 1])]
+    half_width = section_half_width(section, height)
+    depth = section[4] if height > 0 else section[5]
+    return spine + Vector((0, 1, 0)) * (half_width * side) + up * (depth * height), forward, up
+
+
+def section_half_width(section, height):
+    """The head's half width at a height (-1 under the jaw .. 1 on the forehead):
+    blends smoothly between the jaw width and the forehead width."""
+    blend = (height + 1) / 2
+    blend = blend * blend * (3 - 2 * blend)
+    return section[3] + (section[2] - section[3]) * blend
+
+
+def frame_matrix(forward, up):
+    """A rotation whose X axis points along `forward`, Z along `up`, Y across."""
+    across = up.cross(forward).normalized()
+    return Matrix((
+        (forward.x, across.x, up.x, 0),
+        (forward.y, across.y, up.y, 0),
+        (forward.z, across.z, up.z, 0),
+        (0, 0, 0, 1),
+    ))
+
+
+def add_ellipsoid(mesh_data, center, rotation, radii, flip, material=BODY, segments=12):
+    """A squashed ball, turned by `rotation`, for jowls, eyes, brows, nostrils."""
+    matrix = (flip @ Matrix.Translation(center) @ rotation
+              @ Matrix.Diagonal((radii[0], radii[1], radii[2], 1)))
+    faces_before = set(mesh_data.faces)
+    bmesh.ops.create_uvsphere(mesh_data, u_segments=segments, v_segments=max(6, segments // 2),
+                              radius=1.0, matrix=matrix)
+    tag_new_faces(mesh_data, faces_before, material)
+
+
 def add_horse_head(mesh_data, mirror):
-    """The head, its ears, eyes, nostrils, mouth line, cheeks and mane.
-    `mirror` reflects it below the middle (z -> -z): the lower head faces the
-    same way as the upper one."""
+    """The head and neck with ears, eyes, brows, nostrils, mouth, chin, jowls and
+    mane. `mirror` reflects it below the middle (z -> -z), so the lower head faces
+    the same way as the upper one."""
     flip = Matrix.Diagonal((1, 1, -1, 1)) if mirror else Matrix.Identity(4)
     frames = horse_frames()
     side_axis = Vector((0, 1, 0))
@@ -425,15 +479,16 @@ def add_horse_head(mesh_data, mirror):
 
     rings = []
     for (spine, forward, up), section in zip(frames, HORSE_SECTIONS):
-        half_width, above, below = section[2], section[3], section[4]
+        above, below = section[4], section[5]
         ring = []
         for step in range(HORSE_SIDES):
             angle = step * 2 * math.pi / HORSE_SIDES
             across = math.sin(angle)
             upward = math.cos(angle)
-            # Flattened sides, like a real horse's head (a superellipse).
-            lateral = half_width * math.copysign(abs(across) ** 0.65, across)
-            vertical = (above if upward > 0 else below) * math.copysign(abs(upward) ** 0.85, upward)
+            # Flat sides and a flat face (a superellipse), like a real horse's head;
+            # wider at the jaw than at the forehead where the section says so.
+            lateral = section_half_width(section, upward) * math.copysign(abs(across) ** 0.6, across)
+            vertical = (above if upward > 0 else below) * math.copysign(abs(upward) ** 0.8, upward)
             ring.append(mesh_data.verts.new(flip @ (spine + side_axis * lateral + up * vertical)))
         rings.append(ring)
     for index in range(len(rings) - 1):
@@ -441,74 +496,64 @@ def add_horse_head(mesh_data, mirror):
             following = (step + 1) % HORSE_SIDES
             mesh_data.faces.new((rings[index][step], rings[index][following],
                                  rings[index + 1][following], rings[index + 1][step]))
-    # Close the base of the neck and round off the muzzle with a point just ahead.
     mesh_data.faces.new(list(reversed(rings[0])))
-    tip = mesh_data.verts.new(flip @ Vector((0.244, 0, 0.364)))
+    # A soft, rounded nose: the last ring closes to a point just ahead of it.
+    tip_spine, tip_forward, _ = frames[-1]
+    tip = mesh_data.verts.new(flip @ (tip_spine + tip_forward * 0.008))
     for step in range(HORSE_SIDES):
         following = (step + 1) % HORSE_SIDES
         mesh_data.faces.new((rings[-1][step], rings[-1][following], tip))
     tag_new_faces(mesh_data, faces_before, BODY)
 
-    # Cheeks: a flattened swell on each side shapes the jaw.
     for side in (1, -1):
-        matrix = flip @ Matrix.Translation((0.05, side * 0.056, 0.4)) @ Matrix.Diagonal((1.45, 0.45, 1.05, 1))
+        # The jowl: the broad, flat round of the jaw, blended into the cheek.
+        point, forward, up = head_point(frames, 4.9, side * 0.62, -0.5)
+        add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.062, 0.026, 0.058), flip, segments=16)
+
+        # Eye: a small almond, almost flush with the side of the head, under a soft brow.
+        point, forward, up = head_point(frames, 5.3, side * 0.98, -0.02)
+        add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.016, 0.0035, 0.008), flip, TRIM, 12)
+        point, forward, up = head_point(frames, 5.2, side * 0.96, 0.3)
+        add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.028, 0.006, 0.006), flip, segments=10)
+
+        # Nostril: a gentle flare at the side of the nose.
+        point, forward, up = head_point(frames, 10.1, side * 0.82, 0.2)
+        tilt = frame_matrix(forward, up) @ Matrix.Rotation(math.radians(side * 15), 4, "Z")
+        add_ellipsoid(mesh_data, point, tilt, (0.014, 0.005, 0.01), flip, segments=10)
+
+        # Ears: leaf-shaped, pointed and upright, standing at the poll.
+        point, forward, up = head_point(frames, 3.2, side * 0.5, 0.85)
+        matrix = (flip @ Matrix.Translation(point) @ Matrix.Rotation(math.radians(-6), 4, "Y")
+                  @ Matrix.Rotation(math.radians(side * -8), 4, "X") @ Matrix.Translation((0, 0, 0.04))
+                  @ Matrix.Diagonal((1.5, 0.55, 1.0, 1)))
         faces_before = set(mesh_data.faces)
-        bmesh.ops.create_uvsphere(mesh_data, u_segments=16, v_segments=10, radius=0.05, matrix=matrix)
+        bmesh.ops.create_cone(mesh_data, cap_ends=True, cap_tris=False, segments=12,
+                              radius1=0.02, radius2=0.002, depth=0.085, matrix=matrix)
         tag_new_faces(mesh_data, faces_before, BODY)
 
-    # Ears: two small cones leaning back.
-    for side in (1, -1):
-        matrix = (flip @ Matrix.Translation((-0.04, side * 0.036, 0.492))
-                  @ Matrix.Rotation(math.radians(-22), 4, "Y") @ Matrix.Rotation(math.radians(side * -12), 4, "X")
-                  @ Matrix.Translation((0, 0, 0.035)))
-        faces_before = set(mesh_data.faces)
-        bmesh.ops.create_cone(mesh_data, cap_ends=True, cap_tris=False, segments=8,
-                              radius1=0.022, radius2=0.002, depth=0.075, matrix=matrix)
-        tag_new_faces(mesh_data, faces_before, BODY)
+    # Chin: the soft round of the lower lip, under the nose.
+    point, forward, up = head_point(frames, 10.0, 0, -0.8)
+    add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.026, 0.03, 0.015), flip, segments=12)
 
-    # Eyes and nostrils, in the lighter trim colour so they read.
-    for side in (1, -1):
-        add_ball_at(mesh_data, 0.019, flip @ Vector((0.05, side * 0.07, 0.472)))
-        add_ball_at(mesh_data, 0.011, flip @ Vector((0.226, side * 0.027, 0.382)))
-
-    # The mouth: a thin line where the upper and lower lips meet.
-    matrix = (flip @ Matrix.Translation((0.198, 0, 0.352)) @ Matrix.Rotation(math.radians(30), 4, "Y")
-              @ Matrix.Diagonal((0.07, 0.088, 0.007, 1)))
+    # The mouth: a fine line where the lips meet.
+    point, forward, up = head_point(frames, 10.3, 0, -0.35)
+    matrix = (flip @ Matrix.Translation(point) @ frame_matrix(forward, up)
+              @ Matrix.Diagonal((0.04, 0.084, 0.003, 1)))
     faces_before = set(mesh_data.faces)
     bmesh.ops.create_cube(mesh_data, size=1.0, matrix=matrix)
     tag_new_faces(mesh_data, faces_before, TRIM)
 
-    # Mane: a row of carved ridges down the back of the neck.
-    for index in range(7):
-        along = index / 6
-        position = 0.15 + along * 2.75          # from just above the collar to the poll
-        lower = int(position)
-        mix = position - lower
-        spine_a, forward_a, up_a = frames[lower]
-        spine_b, forward_b, up_b = frames[min(lower + 1, len(frames) - 1)]
-        section_a, section_b = HORSE_SECTIONS[lower], HORSE_SECTIONS[min(lower + 1, len(frames) - 1)]
-        spine = spine_a.lerp(spine_b, mix)
-        forward = forward_a.lerp(forward_b, mix).normalized()
-        up = up_a.lerp(up_b, mix).normalized()
-        above = section_a[3] + (section_b[3] - section_a[3]) * mix
-        orientation = Matrix((
-            (up.x, 0, forward.x, 0),
-            (up.y, 1, forward.y, 0),
-            (up.z, 0, forward.z, 0),
-            (0, 0, 0, 1),
-        ))
-        matrix = (flip @ Matrix.Translation(spine + up * (above + 0.004)) @ orientation
-                  @ Matrix.Diagonal((0.03, 0.05, 0.026, 1)))
-        faces_before = set(mesh_data.faces)
-        bmesh.ops.create_cube(mesh_data, size=1.0, matrix=matrix)
-        tag_new_faces(mesh_data, faces_before, TRIM)
-
-
-def add_ball_at(mesh_data, radius, center, material=TRIM):
-    faces_before = set(mesh_data.faces)
-    bmesh.ops.create_uvsphere(mesh_data, u_segments=12, v_segments=8, radius=radius,
-                              matrix=Matrix.Translation(center))
-    tag_new_faces(mesh_data, faces_before, material)
+    # Mane: carved locks lying along the arched crest, overlapping like the
+    # carving on a wooden knight, swept back and alternating a little side to side.
+    for index in range(14):
+        along = 0.2 + index * (3.1 / 13)
+        point, forward, up = head_point(frames, along, (0.18 if index % 2 else -0.18), 1.0)
+        matrix = (flip @ Matrix.Translation(point - up * 0.006) @ frame_matrix(forward, up)
+                  @ Matrix.Rotation(math.radians(-28), 4, "Y"))
+        add_ellipsoid(mesh_data, Vector((0, 0, 0)), matrix, (0.03, 0.03, 0.012), Matrix.Identity(4), segments=10)
+    # Forelock: a small tuft between the ears.
+    point, forward, up = head_point(frames, 3.6, 0, 1.0)
+    add_ellipsoid(mesh_data, point, frame_matrix(forward, up), (0.03, 0.022, 0.012), flip, segments=10)
 
 
 def build_knight(mesh_data, style):

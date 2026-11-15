@@ -12,7 +12,7 @@ dressed with architectural "greebles" taken from wood moldings and mantels
 Every original part is rebuilt first (same sizes and places), then the details
 are added around it, so the silhouette stays the one you know.
 
-Exports models/<piece>-ornate.glb. Afterwards, from the project folder:
+Exports models/<piece>-ornate.glb. The knight swaps the original horns for a raven. Afterwards, from the project folder:
     python3 tools/bundle_models.py
 
 Same conventions as build_pieces.py: one cell = 1 Blender unit, Z up, materials
@@ -116,49 +116,6 @@ def add_octagon_ring(mesh_data, ring_radius, thickness, width, center=(0, 0, 0),
     tag_new_faces(mesh_data, faces_before, material_index)
 
 
-def horn_point(base_radius, length, bend_degrees, along):
-    """Where the horn's spine is, how far it has turned, and how thick it is,
-    a fraction `along` (0 = base, 1 = tip) of the way up. Shared by the horn and
-    the collars that wrap it."""
-    bend = math.radians(bend_degrees)
-    arc_radius = length / bend
-    angle = bend * along
-    spine = Vector((arc_radius * (1 - math.cos(angle)), 0, arc_radius * math.sin(angle)))
-    radius = base_radius * (1 - along) ** 0.8 + 0.004
-    return spine, angle, radius
-
-
-def add_horn(mesh_data, base_radius, length, bend_degrees, center,
-             flip=False, material_index=BODY):
-    faces_before = set(mesh_data.faces)
-    ring_count = 7
-    sides = 4
-    loops = []
-    for ring_index in range(ring_count):
-        along = ring_index / (ring_count - 1)
-        spine, angle, radius = horn_point(base_radius, length, bend_degrees, along)
-        loop = []
-        for side in range(sides):
-            side_angle = side * 2 * math.pi / sides
-            offset = Vector((radius * math.cos(side_angle), radius * 1.6 * math.sin(side_angle), 0))
-            offset.rotate(Matrix.Rotation(-angle, 3, "Y"))
-            point = spine + offset
-            if flip:
-                point = Vector((-point.x, point.y, -point.z))
-            loop.append(mesh_data.verts.new(Vector(center) + point))
-        loops.append(loop)
-    for ring_index in range(ring_count - 1):
-        for side in range(sides):
-            corner_a = loops[ring_index][side]
-            corner_b = loops[ring_index][(side + 1) % sides]
-            corner_c = loops[ring_index + 1][(side + 1) % sides]
-            corner_d = loops[ring_index + 1][side]
-            mesh_data.faces.new((corner_a, corner_b, corner_c, corner_d))
-    mesh_data.faces.new(list(reversed(loops[0])))
-    mesh_data.faces.new(loops[-1])
-    tag_new_faces(mesh_data, faces_before, material_index)
-
-
 # ===== Molding greebles =====
 
 def molding_outline(shape):
@@ -255,16 +212,156 @@ def add_reeds(mesh_data, radius, height, per_face, reed, center=(0, 0, 0), mater
             tag_new_faces(mesh_data, faces_before, material_index)
 
 
-def add_horn_collar(mesh_data, base_radius, length, bend_degrees, center, flip, along):
-    """A bead collar wrapped around a horn, square to its curve."""
-    spine, angle, radius = horn_point(base_radius, length, bend_degrees, along)
-    matrix = Matrix.Translation(center)
-    if flip:
-        matrix = matrix @ Matrix.Rotation(math.pi, 4, "Y")
-    # Same turn and squashed cross-section as the horn's own rings (see add_horn).
-    matrix = matrix @ Matrix.Translation(spine) @ Matrix.Rotation(-angle, 4, "Y") @ Matrix.Diagonal((1, 1.6, 1, 1))
-    add_molded_band(mesh_data, "bead", radius * 0.9, radius * 1.2, 0.03,
-                    rotation=matrix, material_index=TRIM)
+# ===== The raven (the ornate knight's head) =====
+# Modelled from a photo of a raven in profile: a domed head on a thick,
+# feathered neck, a heavy beak as long as the head that hooks down at the tip,
+# a bead eye, and shaggy hackle feathers hanging under the throat. It is lofted
+# from cross-sections like the classic knight's horse, but kept to 8 sides with
+# flat facets to match the ornate set. The head faces +X; the game turns the
+# knight to face the opponent. The lower raven is a mirror image (z -> -z), so
+# both heads face the same way.
+
+# (x, z) of the spine, half width over the top, half width underneath, depth
+# above the spine (crown / nape) and below it (throat / lower beak).
+RAVEN_SECTIONS = [
+    (-0.010, 0.090, 0.100, 0.100, 0.100, 0.100),   # 0 neck base, inside the nut's collar
+    (-0.020, 0.150, 0.100, 0.104, 0.100, 0.104),   # 1 breast: a short, thick neck
+    (-0.015, 0.210, 0.100, 0.104, 0.100, 0.110),   # 2 throat feathers puff out
+    (0.010, 0.270, 0.100, 0.098, 0.100, 0.098),    # 3 back of the big, round head
+    (0.050, 0.310, 0.095, 0.085, 0.090, 0.075),    # 4 domed crown, eye
+    (0.095, 0.325, 0.075, 0.062, 0.070, 0.050),    # 5 forehead
+    (0.135, 0.322, 0.052, 0.044, 0.050, 0.036),    # 6 beak base (from here on: beak)
+    (0.185, 0.312, 0.040, 0.034, 0.038, 0.028),    # 7 heavy beak
+    (0.235, 0.296, 0.029, 0.024, 0.027, 0.020),    # 8
+    (0.280, 0.272, 0.018, 0.015, 0.018, 0.012),    # 9 curving down
+    (0.310, 0.245, 0.008, 0.007, 0.009, 0.006),    # 10 the hook
+]
+RAVEN_SIDES = 8
+RAVEN_BEAK_FROM = 6   # sections from here on are beak (trim colour)
+
+
+def raven_frames():
+    """Spine point, forward direction and 'up' direction for each section."""
+    frames = []
+    count = len(RAVEN_SECTIONS)
+    for index in range(count):
+        before = RAVEN_SECTIONS[max(0, index - 1)]
+        after = RAVEN_SECTIONS[min(count - 1, index + 1)]
+        forward = Vector((after[0] - before[0], 0, after[1] - before[1])).normalized()
+        up = forward.cross(Vector((0, 1, 0))).normalized()
+        section = RAVEN_SECTIONS[index]
+        frames.append((Vector((section[0], 0, section[1])), forward, up))
+    return frames
+
+
+def raven_half_width(section, height):
+    """Half width at a height (-1 underneath .. 1 on top), blended smoothly."""
+    blend = (height + 1) / 2
+    blend = blend * blend * (3 - 2 * blend)
+    return section[3] + (section[2] - section[3]) * blend
+
+
+def raven_point(frames, along, side, height):
+    """A point on the raven's surface: `along` is a section number (fractions
+    allowed), `side` -1..1 across, `height` -1 (throat) .. 1 (crown)."""
+    lower = min(int(along), len(RAVEN_SECTIONS) - 2)
+    mix = along - lower
+    spine = frames[lower][0].lerp(frames[lower + 1][0], mix)
+    forward = frames[lower][1].lerp(frames[lower + 1][1], mix).normalized()
+    up = frames[lower][2].lerp(frames[lower + 1][2], mix).normalized()
+    section = [near + (far - near) * mix for near, far in zip(RAVEN_SECTIONS[lower], RAVEN_SECTIONS[lower + 1])]
+    depth = section[4] if height > 0 else section[5]
+    return spine + Vector((0, 1, 0)) * (raven_half_width(section, height) * side) + up * (depth * height), forward, up
+
+
+def along_frame(forward, up):
+    """A rotation whose X axis follows `forward`, Z follows `up`."""
+    across = up.cross(forward).normalized()
+    return Matrix((
+        (forward.x, across.x, up.x, 0),
+        (forward.y, across.y, up.y, 0),
+        (forward.z, across.z, up.z, 0),
+        (0, 0, 0, 1),
+    ))
+
+
+def add_feather(mesh_data, matrix, radius, length, material=BODY):
+    """One pointed feather: a 4-sided cone along the matrix's Z axis."""
+    faces_before = set(mesh_data.faces)
+    bmesh.ops.create_cone(mesh_data, cap_ends=True, cap_tris=False, segments=4,
+                          radius1=radius, radius2=0.0015, depth=length,
+                          matrix=matrix @ Matrix.Translation((0, 0, length / 2)))
+    tag_new_faces(mesh_data, faces_before, material)
+
+
+def add_raven_head(mesh_data, mirror):
+    flip = Matrix.Diagonal((1, 1, -1, 1)) if mirror else Matrix.Identity(4)
+    frames = raven_frames()
+
+    # The head, neck and beak, lofted from the sections.
+    rings = []
+    for (spine, forward, up), section in zip(frames, RAVEN_SECTIONS):
+        ring = []
+        for step in range(RAVEN_SIDES):
+            angle = (step + 0.5) * 2 * math.pi / RAVEN_SIDES
+            across = math.sin(angle)
+            upward = math.cos(angle)
+            depth = section[4] if upward > 0 else section[5]
+            point = spine + Vector((0, raven_half_width(section, upward) * across, 0)) + up * (depth * upward)
+            ring.append(mesh_data.verts.new(flip @ point))
+        rings.append(ring)
+    for index in range(len(rings) - 1):
+        material = TRIM if index >= RAVEN_BEAK_FROM else BODY
+        for step in range(RAVEN_SIDES):
+            following = (step + 1) % RAVEN_SIDES
+            face = mesh_data.faces.new((rings[index][step], rings[index][following],
+                                        rings[index + 1][following], rings[index + 1][step]))
+            face.material_index = material
+    mesh_data.faces.new(list(reversed(rings[0]))).material_index = BODY
+    tip_spine, tip_forward, tip_up = frames[-1]
+    tip = mesh_data.verts.new(flip @ (tip_spine + tip_forward * 0.014 - tip_up * 0.012))   # hooked tip
+    for step in range(RAVEN_SIDES):
+        following = (step + 1) % RAVEN_SIDES
+        mesh_data.faces.new((rings[-1][step], rings[-1][following], tip)).material_index = TRIM
+
+    # The gape: a dark line along the beak where it opens.
+    point, forward, up = raven_point(frames, 7.4, 0, -0.15)
+    matrix = flip @ Matrix.Translation(point) @ along_frame(forward, up) @ Matrix.Diagonal((0.13, 0.07, 0.004, 1))
+    faces_before = set(mesh_data.faces)
+    bmesh.ops.create_cube(mesh_data, size=1.0, matrix=matrix)
+    tag_new_faces(mesh_data, faces_before, BODY)
+
+    # Eyes: small glossy beads.
+    for side in (1, -1):
+        point, forward, up = raven_point(frames, 4.4, side * 0.94, 0.3)
+        matrix = (flip @ Matrix.Translation(point) @ along_frame(forward, up)
+                  @ Matrix.Diagonal((0.014, 0.009, 0.014, 1)))
+        faces_before = set(mesh_data.faces)
+        bmesh.ops.create_uvsphere(mesh_data, u_segments=8, v_segments=6, radius=1.0, matrix=matrix)
+        tag_new_faces(mesh_data, faces_before, TRIM)
+
+    # Hackles: shaggy feathers hanging under the throat.
+    # They grow from the throat just under the beak and hang down and back.
+    hackles = ((4.6, -0.4), (4.6, 0.4), (4.2, -0.6), (4.2, 0.0), (4.2, 0.6),
+               (3.8, -0.45), (3.8, 0.45), (3.4, 0.0))
+    for along, side in hackles:
+        point, forward, up = raven_point(frames, along, side, -0.9)
+        matrix = (flip @ Matrix.Translation(point) @ Matrix.Rotation(math.radians(192), 4, "Y")
+                  @ Matrix.Rotation(math.radians(side * 14), 4, "X") @ Matrix.Diagonal((1, 0.55, 1, 1)))
+        add_feather(mesh_data, matrix, 0.016, 0.055)
+
+    # A few ruffled crown feathers, swept back.
+    for along, side in ((3.4, 0.0), (3.9, -0.3), (3.9, 0.3)):
+        point, forward, up = raven_point(frames, along, side, 0.95)
+        matrix = flip @ Matrix.Translation(point) @ Matrix.Rotation(math.radians(-70), 4, "Y")
+        add_feather(mesh_data, matrix, 0.012, 0.035)
+
+    # A ring of feather tips where the neck rises from the nut.
+    for index in range(14):
+        angle = index * 2 * math.pi / 14
+        matrix = (flip @ Matrix.Rotation(angle, 4, "Z") @ Matrix.Translation((0.092, 0, 0.112))
+                  @ Matrix.Rotation(math.radians(58), 4, "Y"))
+        add_feather(mesh_data, matrix, 0.02, 0.05, TRIM)
 
 
 # ===== The pieces: the original parts first, then the ornament =====
@@ -387,21 +484,19 @@ def build_rook(mesh_data):
 
 
 def build_knight(mesh_data):
-    # Original: double octagonal nut, trim ring, two curling horns.
+    # Original: double octagonal nut and trim ring. The original's curling horns
+    # are replaced here by a raven's head, up and down (owner's request).
     add_octagon_cylinder(mesh_data, 0.26, 0.09, center=(0, 0, 0.05))
     add_octagon_cylinder(mesh_data, 0.24, 0.09, center=(0, 0, -0.06))
     add_octagon_ring(mesh_data, 0.13, 0.04, 0.03, center=(0, 0, 0.105), material_index=TRIM)
-    add_horn(mesh_data, 0.15, 0.42, 120, center=(-0.08, 0, 0.09))
-    add_horn(mesh_data, 0.15, 0.42, 120, center=(0.08, 0, -0.1), flip=True)
+    add_raven_head(mesh_data, mirror=False)
+    add_raven_head(mesh_data, mirror=True)
 
     # Ornament.
     add_dentil_ring(mesh_data, 0.266, 28, (0.014, 0.022, 0.05), center=(0, 0, 0.05))
     add_dentil_ring(mesh_data, 0.246, 26, (0.014, 0.022, 0.05), center=(0, 0, -0.06))
     add_molded_band(mesh_data, "bead", 0.2, 0.262, 0.016, center=(0, 0, 0.097), material_index=TRIM)
     add_molded_band(mesh_data, "bead", 0.18, 0.242, 0.016, center=(0, 0, -0.107), material_index=TRIM)
-    # One collar where each horn rises from the nut (more along the curve read as clutter).
-    add_horn_collar(mesh_data, 0.15, 0.42, 120, (-0.08, 0, 0.09), False, 0.06)
-    add_horn_collar(mesh_data, 0.15, 0.42, 120, (0.08, 0, -0.1), True, 0.06)
 
 
 def build_pawn_body(mesh_data):

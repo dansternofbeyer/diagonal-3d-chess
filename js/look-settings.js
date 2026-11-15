@@ -21,6 +21,14 @@ window.CHESS_LOOK_DEFAULTS = {
   pieceShine: 0.85,           // the clear glossy coat on top (0 = none, 1 = full)
   rimLight: 0.35,             // the soft glow around a piece's outline
 
+  // Finish: "wood" (wood grain, painted by a shader) or "lacquer" (plain colours above).
+  // Wood colours come from the grain photos: golden wood for Red, dark walnut for Black.
+  pieceFinish: "wood",
+  redWoodLight: "#b0703a",
+  redWoodDark: "#55290f",
+  blackWoodLight: "#6e4b33",
+  blackWoodDark: "#2a160b",
+
   // Size of each piece inside its cell (1 = as modelled in Blender)
   pieceScale: { king: 1, queen: 1, rook: 1, bishop: 1, knight: 1, pawn: 1 },
 

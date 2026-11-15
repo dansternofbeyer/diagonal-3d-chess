@@ -274,22 +274,91 @@ window.ChessScene = (function () {
    * surface turns away from the camera (the outline of a piece) it gets a soft
    * glow, so dark pieces stand out against the dark background.
    */
-  function addRimLight(material, rimColor, strength) {
-    material.userData.rimUniforms = {
-      rimColor: { value: new THREE.Color(rimColor) },
-      rimStrength: { value: strength },
+  /*
+   * Wood grain, painted by the shader rather than an image (the models have no
+   * texture coordinates to wrap a photo onto). Each piece is treated as if it
+   * were turned from a log whose trunk runs up the piece, a little off to one
+   * side: the growth rings then show as long, gently wavy stripes, with fine
+   * fibres between them, like the grain in docs' wood photos. The colours of
+   * the light and dark wood come from the look settings.
+   */
+  const WOOD_SHADER_FUNCTIONS = `
+    uniform vec3 woodLight;
+    uniform vec3 woodDark;
+    uniform float woodAmount;
+    varying vec3 vWoodPosition;
+
+    float woodHash(vec3 p) {
+      p = fract(p * 0.3183099 + 0.1);
+      p *= 17.0;
+      return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+    }
+
+    // Smooth random values in 3D (value noise), for the waviness of the grain.
+    float woodNoise(vec3 p) {
+      vec3 cell = floor(p);
+      vec3 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(mix(woodHash(cell), woodHash(cell + vec3(1, 0, 0)), f.x),
+            mix(woodHash(cell + vec3(0, 1, 0)), woodHash(cell + vec3(1, 1, 0)), f.x), f.y),
+        mix(mix(woodHash(cell + vec3(0, 0, 1)), woodHash(cell + vec3(1, 0, 1)), f.x),
+            mix(woodHash(cell + vec3(0, 1, 1)), woodHash(cell + vec3(1, 1, 1)), f.x), f.y),
+        f.z);
+    }
+
+    vec3 woodColor(vec3 p) {
+      // Waviness: the rings bend slowly along the trunk (Y), like real grain.
+      vec3 stretched = p * vec3(1.0, 0.3, 1.0);
+      float warp = woodNoise(stretched * 2.5) * 0.7 + woodNoise(stretched * 7.0) * 0.3;
+      // Distance from the (off-centre) trunk counts the growth rings.
+      float rings = length(p.xz + vec2(0.85, 0.3)) * 15.0 + warp * 2.6 + p.y * 0.9;
+      float ring = fract(rings);
+      // Each ring: pale wood that darkens toward a thin dark line.
+      float band = smoothstep(0.0, 0.2, ring) * (1.0 - smoothstep(0.55, 1.0, ring));
+      // Fine fibres running along the grain.
+      float fibres = woodNoise(vec3(p.x * 110.0, p.y * 5.0, p.z * 110.0));
+      float tone = clamp(band * 0.78 + fibres * 0.28, 0.0, 1.0);
+      return mix(woodDark, woodLight, tone);
+    }
+  `;
+
+  /*
+   * Additions to three.js's own material shader for the pieces:
+   *   - rim light: where a surface turns away from the camera (a piece's
+   *     outline) it gets a soft glow, so dark pieces stand out
+   *   - wood grain (see above), when the finish is wood
+   * `options`: { rimColor, rimStrength, woodLight, woodDark, wood (true/false) }
+   */
+  function addPieceShader(material, options) {
+    material.userData.pieceShaderOptions = options;
+    material.userData.pieceUniforms = {
+      rimColor: { value: new THREE.Color(options.rimColor) },
+      rimStrength: { value: options.rimStrength },
+      // Converted to linear light, so the wood shows the colours picked (unconverted,
+      // the screen's brightening would bleach the golden wood to pale birch).
+      woodLight: { value: new THREE.Color(options.woodLight || "#ffffff").convertSRGBToLinear() },
+      woodDark: { value: new THREE.Color(options.woodDark || "#000000").convertSRGBToLinear() },
+      woodAmount: { value: options.wood ? 1 : 0 },
     };
     material.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, material.userData.rimUniforms);
+      Object.assign(shader.uniforms, material.userData.pieceUniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying vec3 vWoodPosition;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWoodPosition = position;");
       shader.fragmentShader = shader.fragmentShader
-        .replace("#include <common>", "#include <common>\nuniform vec3 rimColor;\nuniform float rimStrength;")
+        .replace("#include <common>", "#include <common>\nuniform vec3 rimColor;\nuniform float rimStrength;\n" + WOOD_SHADER_FUNCTIONS)
+        .replace("#include <color_fragment>", [
+          "#include <color_fragment>",
+          "diffuseColor.rgb = mix(diffuseColor.rgb, woodColor(vWoodPosition), woodAmount);",
+        ].join("\n"))
         .replace("#include <output_fragment>", [
           "float rimFacing = 1.0 - saturate(dot(normal, normalize(vViewPosition)));",
           "outgoingLight += rimColor * pow(rimFacing, 3.0) * rimStrength;",
           "#include <output_fragment>",
         ].join("\n"));
     };
-    material.customProgramCacheKey = () => "rim-light";
+    material.customProgramCacheKey = () => "piece-shader";
     return material;
   }
 
@@ -362,11 +431,11 @@ window.ChessScene = (function () {
     uniforms.bottomColor.value.set(darkerColor(backgroundColor, 0.45));
   }
 
-  /** Copy a piece material, keeping its rim light (a plain clone would lose it). */
+  /** Copy a piece material, keeping its shader additions (a plain clone would lose them). */
   function clonePieceMaterial(material) {
     const copy = material.clone();
-    const rim = material.userData.rimUniforms;
-    if (rim) addRimLight(copy, rim.rimColor.value, rim.rimStrength.value);
+    const options = material.userData.pieceShaderOptions;
+    if (options) addPieceShader(copy, options);
     return copy;
   }
 
@@ -623,24 +692,45 @@ window.ChessScene = (function () {
    * One shiny material: a glossy clear coat over the colour (like lacquer),
    * reflecting the studio environment, plus the rim light.
    */
-  function createShinyMaterial(color, look, extraMetalness) {
+  /**
+   * One piece material: a glossy clear coat (lacquer, or varnish on wood) over
+   * the colour, reflecting the studio environment, plus the rim light.
+   * `wood`: null for a plain colour, or { light, dark } wood colours.
+   */
+  function createShinyMaterial(color, look, extraMetalness, wood) {
     const material = new THREE.MeshPhysicalMaterial({
       color,
-      roughness: look.pieceRoughness,
-      metalness: Math.min(1, look.pieceMetalness + (extraMetalness || 0)),
+      roughness: wood ? Math.max(look.pieceRoughness, 0.42) : look.pieceRoughness,
+      metalness: wood ? 0 : Math.min(1, look.pieceMetalness + (extraMetalness || 0)),
       clearcoat: look.pieceShine,
-      clearcoatRoughness: 0.06,
+      clearcoatRoughness: wood ? 0.12 : 0.06,
     });
-    return addRimLight(material, lighterColor(color, 0.35), look.rimLight);
+    return addPieceShader(material, {
+      rimColor: lighterColor(wood ? wood.light : color, 0.35),
+      rimStrength: look.rimLight,
+      woodLight: wood ? wood.light : null,
+      woodDark: wood ? wood.dark : null,
+      wood: Boolean(wood),
+    });
   }
 
-  /** Body and trim materials for both sides. The trim is the body colour, a little lighter. */
+  /**
+   * Body and trim materials for both sides. The trim is the body, a little
+   * lighter. With the wood finish, Red is golden wood and Black dark walnut.
+   */
   function createPieceMaterials(look) {
+    const isWood = look.pieceFinish === "wood";
+    const woodFor = (side, lighten) => (isWood ? {
+      light: lighterColor(look[side + "WoodLight"], lighten),
+      dark: lighterColor(look[side + "WoodDark"], lighten),
+    } : null);
     return {
-      red: createShinyMaterial(look.redColor, look),
-      black: createShinyMaterial(look.blackColor, look),
-      redTrim: createShinyMaterial(lighterColor(look.redColor, look.trimLighten), look, 0.2),
-      blackTrim: createShinyMaterial(lighterColor(look.blackColor, look.trimLighten), look, 0.2),
+      red: createShinyMaterial(look.redColor, look, 0, woodFor("red", 0)),
+      black: createShinyMaterial(look.blackColor, look, 0, woodFor("black", 0)),
+      redTrim: createShinyMaterial(lighterColor(look.redColor, look.trimLighten), look, 0.2,
+        woodFor("red", look.trimLighten)),
+      blackTrim: createShinyMaterial(lighterColor(look.blackColor, look.trimLighten), look, 0.2,
+        woodFor("black", look.trimLighten)),
     };
   }
 

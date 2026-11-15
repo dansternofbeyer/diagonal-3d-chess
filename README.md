@@ -116,16 +116,23 @@ Every piece comes in three versions, chosen per piece in the Studio
 ![King versions](docs/versions-king.png)
 
 - **Original**: the 2006-style pieces.
-- **Ornate**: the original shapes, unchanged, dressed with architectural "greebles"
-  from wood moldings and mantels: ogee, cove, quarter-round and bead bands, dentil
-  courses, fluted pilaster faces and cornice caps.
+- **Ornate**: the original shapes, dressed with architectural "greebles" from wood
+  moldings and mantels: ogee, cove, quarter-round and bead bands, dentil courses,
+  fluted pilaster faces and cornice caps. Its knight is a raven: a heavy hooked beak,
+  a bead eye and shaggy throat hackles, cut in the set's faceted style.
 - **Classic**: classic Staunton chess pieces crossed with architectural moldings
   (torus, scotia, fillet, collar, baluster stem), smooth and curved. Each is like two
   classic pieces joined at their bases, so it reads the same from above and below.
-  The knight has a sculpted 3D horse head (muzzle, jaw, ears, eyes, mane) at both
-  ends, both facing the same way.
+  The knight has a sculpted 3D horse head at both ends, both facing the same way:
+  a long flat face, a rounded jowl, a soft muzzle with nostrils and chin, small
+  almond eyes under a brow, upright ears and a carved mane.
 
 Every knight, in every version, faces the opponent.
+
+**Wood grain.** By default the pieces are rendered in wood: golden wood for Red and
+dark walnut for Black. The grain is painted by a shader as if each piece were
+turned from a log, so it flows along the piece. Switch to plain gloss colours, or
+change the wood colours, under **Finish** in the Studio.
 
 Glowing things light up their surroundings: the selected piece casts a warm yellow
 light and the move dots or cubes cast their colour onto nearby pieces.
@@ -181,9 +188,10 @@ Documents/           the project's goals and links
 - Design, code and models: Dan Sternof Beyer. Code is open source under the
   [MIT License](LICENSE).
 - The piece designs are recreated from the 2006 originals by the same author.
-  The classic and ornate versions were drawn from reference photos of a Staunton
-  chess set and of wood moldings. Those photos belong to others and are not
-  included in this repository.
+  The classic and ornate versions, the horse and raven heads and the wood colours
+  were drawn from reference photos (a Staunton chess set, wood moldings, a horse's
+  head, a carved knight, a raven, wood grain). Those photos belong to others and
+  are not included in this repository.
 - The lighting is a small hand-written shader (`STUDIO_FRAGMENT_SHADER` in
   `js/chess-scene.js`) that paints a dark photo studio with an overhead softbox,
   used as the reflection map, plus a rim-light addition to the piece material.

@@ -82,6 +82,12 @@ Working and tested in Chrome, both over http and from `file://`:
 - Animation: the move is applied to the game first and the board redrawn; then
   `animateMove` plays the mover from its old place (`ChessScene.movePath`,
   `setPawnLength`). Any redraw calls `finishAnimations()` first.
+- **Wood finish** (`look.pieceFinish` = "wood" default | "lacquer"): procedural grain
+  in the piece shader (`WOOD_SHADER_FUNCTIONS`, `addPieceShader` in chess-scene.js),
+  from object-space position (models have no UVs, so photos can't be mapped). Wood
+  colours `redWoodLight/Dark`, `blackWoodLight/Dark` are converted sRGB -> linear
+  (unconverted they wash out). `addPieceShader` also holds the rim light; clone piece
+  materials with `clonePieceMaterial` to keep both.
 - Haze: `look.haze` (0..1) sets `THREE.FogExp2` density (`HAZE_AT_FULL` = 0.05 at 1),
   fog colour = backgroundColor; the sky dome ignores fog. `viewer.setHaze(amount, color)`.
 - **Castling** (`getCastlingMoves`, `getPlayMoves` = classic + castling; the UI uses
@@ -102,12 +108,14 @@ Working and tested in Chrome, both over http and from `file://`:
   Knights are modelled facing +X; `KNIGHT_TURN` in chess-scene.js turns every knight
   to face the opponent. "ornate" =
   original geometry + molding greebles (`blender/build_ornate_pieces.py`: molded
-  profile bands, dentil rings, reeds/fluting). Its horn collars sit only at the horn
+  profile bands, dentil rings, reeds/fluting); its knight is a lofted, 8-sided raven
+  head (`add_raven_head`) instead of the original horns. Its horn collars sit only at the horn
   bases: the original horn rings are skewed, so collars along the curve looked broken. Model keys are
   `king` (original) or `king-classic` / `king-ornate`; pawns use `pawn_body-<v>` + `pawn_cap-<v>`.
   `ChessScene.pieceModel` falls back to the original. Classic-style pieces are built
   by `blender/build_classic_pieces.py` (profile + lathe system, mirrored top/bottom,
-  knight = lofted 3D horse head, mirrored so both heads face the same way). It runs
+  knight = lofted 3D horse head with separate jaw/forehead widths, features placed
+  with `head_point`, mirrored so both heads face the same way). It runs
   headless: `Blender -b blender/pieces.blend --python blender/build_classic_pieces.py`
   (see its docstring), no MCP paste needed. The pawn body must stay 1.0
   tall (the game stretches it). All versions are bundled, so `models/pieces.js` is
