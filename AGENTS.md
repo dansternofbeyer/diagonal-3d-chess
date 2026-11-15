@@ -12,6 +12,12 @@ allows "incorrect" moves (Free moves mode, taking pieces off by hand).
 
 ## Current state (2026-11-14)
 
+Repository: https://github.com/dansternofbeyer/diagonal-3d-chess (public, branch `main`).
+Commits use the GitHub noreply email (set in this repo's git config), not a personal one.
+Third-party reference photos in docs/ are git-ignored on purpose (see .gitignore).
+The README's "Download and play" section is written for people new to GitHub: keep it
+first and keep the ZIP link pointing at archive/refs/heads/main.zip.
+
 Working and tested in Chrome, both over http and from `file://`:
 - `index.html`: dark theme; play, orbit/pan/zoom (middle- or right-drag pans),
   classic + free moves, animated moves (knight L, sliding, pawns grow/shrink),
